@@ -75,7 +75,12 @@ textarea{min-height:80px;resize:vertical}
 .sr.tot .sv{color:#E8863A;font-size:22px;font-weight:700;font-family:'DM Serif Display',Georgia,serif}
 .nav{display:flex;align-items:center;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid #eee}
 .bp{background:#E8863A;border:none;color:#fff;padding:13px 28px;border-radius:4px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .2s,opacity .2s}
-.bp:hover{background:#d4732a}.bp.dim{opacity:.4;cursor:default}
+.bp:hover{background:#d4732a}
+.bp.dim,.bp:disabled{opacity:.4;cursor:not-allowed}
+.bp:disabled:hover{background:#E8863A}
+.dev-banner{background:#7f1d1d;color:#fff;border-radius:6px;padding:11px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.dev-banner strong{font-size:12px;letter-spacing:2px}
+.dev-banner span{font-size:11px;opacity:.9;text-align:right}
 .bs{background:#fff;border:1px solid #ddd;color:#888;padding:11px 20px;border-radius:4px;font-size:13px;cursor:pointer;font-family:inherit}
 .bs:hover{border-color:#aaa}
 .spacer{flex:1}
@@ -85,7 +90,7 @@ textarea{min-height:80px;resize:vertical}
 </style>
 </head>
 <body>
-<div class="wrap" id="app"><p style="color:#888;text-align:center;padding:40px 0">Loading...</p></div>
+<div class="wrap" id="app"><p style="color:#888;text-align:center;padding:40px 0">Loading rates & availability…</p></div>
 <script>
 document.addEventListener("DOMContentLoaded",function(){
 
@@ -106,6 +111,7 @@ var API_URL=IS_DEV
   ? "https://script.google.com/macros/s/AKfycbyDNOQ_0Xfe6Gbliy4TiSJk7-V6xFrPqhfMWEaeIiGZqa6ElCLe-6Pbcscmli3DbffK/exec"
   : "https://script.google.com/macros/s/AKfycbzZ0xnhLaCKd3gsRSOPjFSPMAQF3IlWgNCo3BP5SXLdHCbMYPtJk_zZRWzPL9JC5Xk/exec";
 var EXPECTED_STRIPE_MODE=IS_DEV?"test":"live";
+if(IS_DEV)document.title="TEST — Reserve Casa Papelillo";
 
 // Kept for compatibility with the existing widget; Stripe Checkout itself
 // is created server-side and redirected via data.url.
@@ -129,6 +135,14 @@ function hB(s,e){var d=new Date(s);while(d<=e){if(iB(d))return true;d=aD(d,1)}re
 function gS(ci,co){var d=new Date(ci),h=0,l=0;while(d<co){gH(d)?h++:l++;d=aD(d,1)}return h>=l?"high":"low"}
 function cDays(y,m){var f=new Date(y,m,1),last=new Date(y,m+1,0).getDate();var dow=f.getDay();if(dow===0)dow=7;var days=[];for(var i=1;i<dow;i++)days.push(null);for(var d=1;d<=last;d++)days.push(new Date(y,m,d));return days}
 function f$(n){return"$"+n.toLocaleString()}
+function eH(v){
+  return String(v===undefined||v===null?"":v)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
 
 function nts(){return S.ci&&S.co?df(S.ci,S.co):0}
 function getNB(){if(!S.ci||!S.co)return{high:0,low:0};var h=0,l=0,d=new Date(S.ci);while(d<S.co){gH(d)?h++:l++;d=aD(d,1)}return{high:h,low:l}}
@@ -147,7 +161,7 @@ function R(){
     return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+t+'</span></div>'
   }).join("");
 
-  html=(IS_DEV?'<div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#c25050;text-transform:uppercase;margin-bottom:8px">Development / Stripe Test Mode</div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? Please WhatsApp or email us at +1 (315) 262-0362 | info@casapapellilo.com</p><div class="steps">'+stH+'</div>';
+  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? Please WhatsApp or email us at +1 (315) 262-0362 | info@casapapellilo.com</p><div class="steps">'+stH+'</div>';
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){
@@ -190,7 +204,7 @@ function R(){
       +'<span style="font-size:11px;color:#aaa">High Season — Full refund if cancelled &gt;60 days before arrival</span><br>'
       +'<span style="font-size:11px;color:#aaa">Low Season — Full refund if cancelled &gt;30 days before arrival</span><br>'
       +'<span style="font-size:11px;color:#aaa;margin-top:4px;display:inline-block">No refund within cancellation window</span></div></div></div>'
-      +pH+(S.err?'<div class="err">'+S.err+'</div>':"")
+      +pH+(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':"")
       +'<div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';
     for(var g=1;g<=12;g++)html+='<option value="'+g+'"'+(S.guests===g?' selected':'')+'>'+g+'</option>';
     html+='</select></div>';
@@ -232,15 +246,15 @@ function R(){
     TRANSPORT.forEach(function(i){if(S.tr[i.id]){var q=S.tr[i.id]||1;trL+='<div class="sr"><span class="sk">'+i.nm+(q>1?" ×"+q:"")+'</span><span class="sv">'+f$(i.pr*q)+'</span></div>'}});
 
     html+='<h2 class="eh2">Contact & Payment</h2><p class="esub">Review your booking and proceed to secure payment.</p>'
-      +'<div class="fld"><label class="lbl">Full name *</label><input value="'+S.name+'" oninput="S.name=this.value" placeholder="Name"></div>'
-      +'<div class="fld"><label class="lbl">Email address *</label><input value="'+S.email+'" oninput="S.email=this.value" placeholder="Email" type="email"></div>'
-      +'<div class="fld"><label class="lbl">Phone / WhatsApp *</label><input value="'+S.phone+'" oninput="S.phone=this.value" placeholder="Telephone"></div>'
-      +'<div class="fld"><label class="lbl">Special requests or notes</label><textarea oninput="S.notes=this.value" placeholder="Dietary needs, celebrations, special requests...">'+S.notes+'</textarea></div>'
+      +'<div class="fld"><label class="lbl" for="contactName">Full name *</label><input id="contactName" value="'+eH(S.name)+'" oninput="S.name=this.value;syncPayButton()" placeholder="Name" autocomplete="name"></div>'
+      +'<div class="fld"><label class="lbl" for="contactEmail">Email address *</label><input id="contactEmail" value="'+eH(S.email)+'" oninput="S.email=this.value;syncPayButton()" placeholder="Email" type="email" autocomplete="email" inputmode="email"></div>'
+      +'<div class="fld"><label class="lbl" for="contactPhone">Phone / WhatsApp *</label><input id="contactPhone" value="'+eH(S.phone)+'" oninput="S.phone=this.value;syncPayButton()" placeholder="Telephone" type="tel" autocomplete="tel" inputmode="tel"></div>'
+      +'<div class="fld"><label class="lbl" for="contactNotes">Special requests or notes</label><textarea id="contactNotes" oninput="S.notes=this.value" placeholder="Dietary needs, celebrations, special requests...">'+eH(S.notes)+'</textarea></div>'
       +'<div class="sbox"><div class="slbl">BOOKING SUMMARY</div>'
       +'<div class="sr"><span class="sk">'+fD(S.ci)+' — '+fD(S.co)+'</span><span class="sv">'+nts()+' nights · '+S.guests+' guest'+(S.guests>1?"s":"")+'</span></div>'
       +acL+trL
       +'<div class="sr tot"><span class="sk">Total to Pay</span><span class="sv">'+f$(gTot())+' USD</span></div></div>'
-      +(S.err?'<div class="err">'+S.err+'</div>':'')
+      +(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':'')
       +'<div class="stripe-badge">Secure payment powered by Stripe</div>';
   }
 
@@ -248,15 +262,37 @@ function R(){
   html+='<div class="nav">';
   if(S.step>0)html+='<button class="bs" onclick="goB()">← Back</button>';
   html+='<div class="spacer"></div>';
-  if(S.step===0){var can=S.ci&&S.co;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()">Continue →</button>'}
+  if(S.step===0){var can=S.ci&&S.co;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()"'+(can?"":" disabled") +'>Continue →</button>'}
   if(S.step===1)html+='<button class="bp" onclick="goN()">Continue →</button>';
-  if(S.step===2){var can2=S.name.trim()&&S.email.trim()&&S.phone.trim();html+='<button class="bp'+(can2&&!S.sending?"":" dim")+'" onclick="pay()">'+(S.sending?"Processing...":"Pay "+f$(gTot())+" USD →")+'</button>'}
+  if(S.step===2){var can2=contactReady();html+='<button id="payBtn" class="bp'+(can2&&!S.sending?"":" dim")+'" onclick="pay()"'+(can2&&!S.sending?"":" disabled")+'>'+(S.sending?"Processing...":"Pay "+f$(gTot())+" USD →")+'</button>'}
   html+='</div>';
 
   app.innerHTML=html;
 }
 
 window.R=R;
+
+function contactReady(){
+  var nameOk=!!S.name.trim();
+  var phoneOk=!!S.phone.trim();
+  var emailOk=!!S.email.trim();
+
+  var emailInput=document.getElementById("contactEmail");
+  if(emailInput)emailOk=emailOk&&emailInput.checkValidity();
+  else emailOk=emailOk&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.email.trim());
+
+  return nameOk&&emailOk&&phoneOk;
+}
+
+window.syncPayButton=function(){
+  var btn=document.getElementById("payBtn");
+  if(!btn)return;
+
+  var ready=contactReady()&&!S.sending;
+  btn.disabled=!ready;
+  btn.classList.toggle("dim",!ready);
+};
+
 /* ═══ HANDLERS ═══ */
 window.pM=function(){if(S.vM===0){S.vM=11;S.vY--}else S.vM--;R()};
 window.nM=function(){if(S.vM===11){S.vM=0;S.vY++}else S.vM++;R()};
@@ -283,7 +319,12 @@ window.goN=function(){
 };
 
 window.pay=function(){
-  if(!S.name.trim()||!S.email.trim()||!S.phone.trim()){S.err="Please fill in all required fields.";R();return}
+  if(!contactReady()){
+    S.err=!S.name.trim()||!S.email.trim()||!S.phone.trim()
+      ?"Please fill in all required fields."
+      :"Please enter a valid email address.";
+    R();return
+  }
   if(S.sending)return;
   S.sending=true;S.err="";R();
 
@@ -379,7 +420,7 @@ function loadBookingData(){
   .catch(function(err){
     document.getElementById("app").innerHTML=
       '<div class="err">Booking system unavailable: '+
-      String(err.message||err)+
+      eH(String(err.message||err))+
       '</div>';
   });
 }

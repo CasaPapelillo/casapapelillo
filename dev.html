@@ -297,6 +297,12 @@ window.pay=function(){
     checkIn:fd(S.ci),
     checkOut:fd(S.co),
     guests:String(S.guests),
+
+    // These are NOT trusted for pricing. The backend only compares them
+    // with the current Sheet values to detect a stale browser session.
+    displayedRateLow:String(RATE_L),
+    displayedRateHigh:String(RATE_H),
+
     transport:transportData,
     name:S.name,
     email:S.email,
@@ -310,7 +316,10 @@ window.pay=function(){
     if(data.success&&data.url){
       window.top.location.href=data.url;
     }else{
-      S.err="Payment setup failed: "+(data.message||"Please try again.");S.sending=false;R();
+      S.err=(data&&data.code==="RATES_CHANGED")
+        ?"Rates changed while this page was open. Please refresh the page before continuing."
+        :"Payment setup failed: "+(data.message||"Please try again.");
+      S.sending=false;R();
     }
   })
   .catch(function(e){

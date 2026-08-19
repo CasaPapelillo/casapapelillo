@@ -90,32 +90,25 @@ textarea{min-height:80px;resize:vertical}
 document.addEventListener("DOMContentLoaded",function(){
 
 /* ═══ DATA ═══ */
-var HIGH_SEASON=[
-  {start:"2026-01-29",end:"2026-02-12",label:"Chinese New Year"},
-  {start:"2026-03-29",end:"2026-04-05",label:"Holy & Easter Week"},
-  {start:"2026-11-10",end:"2026-11-18",label:"Ondalinda Festival"},
-  {start:"2026-12-20",end:"2027-01-05",label:"Christmas & New Year's"},
-  {start:"2027-02-05",end:"2027-02-20",label:"Chinese New Year"},
-  {start:"2027-03-21",end:"2027-03-28",label:"Holy & Easter Week"},
-  {start:"2027-11-10",end:"2027-11-18",label:"Ondalinda Festival"},
-  {start:"2027-12-20",end:"2028-01-05",label:"Christmas & New Year's"}
-];
+var HIGH_SEASON=[];
 var BOOKED=[];
-const RATE_H = 3200;
-const RATE_L = 1400;
-const MIN_H = 5;
-const MIN_L = 1;
+var RATE_H=0;
+var RATE_L=0;
+var MIN_H=1;
+var MIN_L=1;
 var MO=["January","February","March","April","May","June","July","August","September","October","November","December"];
 var DY=["Mo","Tu","We","Th","Fr","Sa","Su"];
 
-var TRANSPORT=[
-  {id:"sedan_mzt",nm:"Manzanillo Airport — Sedan",ds:"Private sedan, up to 4 guests",pr:150},
-  {id:"sub_mzt",nm:"Manzanillo Airport — Suburban",ds:"Private Suburban, up to 7 guests",pr:250},
-  {id:"sedan_pvr",nm:"Puerto Vallarta Airport — Sedan",ds:"Private sedan, up to 4 guests",pr:250},
-  {id:"sub_pvr",nm:"Puerto Vallarta Airport — Suburban",ds:"Private Suburban, up to 7 guests",pr:425}
-];
+var TRANSPORT=[];
 
-var API_URL="https://script.google.com/macros/s/AKfycbzZ0xnhLaCKd3gsRSOPjFSPMAQF3IlWgNCo3BP5SXLdHCbMYPtJk_zZRWzPL9JC5Xk/exec";
+var IS_DEV=new URLSearchParams(window.location.search).get("env")==="dev";
+var API_URL=IS_DEV
+  ? "https://script.google.com/macros/s/AKfycbyDNOQ_0Xfe6Gbliy4TiSJk7-V6xFrPqhfMWEaeIiGZqa6ElCLe-6Pbcscmli3DbffK/exec"
+  : "https://script.google.com/macros/s/AKfycbzZ0xnhLaCKd3gsRSOPjFSPMAQF3IlWgNCo3BP5SXLdHCbMYPtJk_zZRWzPL9JC5Xk/exec";
+var EXPECTED_STRIPE_MODE=IS_DEV?"test":"live";
+
+// Kept for compatibility with the existing widget; Stripe Checkout itself
+// is created server-side and redirected via data.url.
 var STRIPE_PK="pk_live_51TTqRK05yZTOTSGOqszWPCzx3TWZEXY0QJvp2twVeL1ukk40WhlNIa9HnSd6w7BZt31uPDazzx3ySM25SwD0xW3P00VT1Sgk5E";
   
 var now=new Date(),todayC=new Date(now.getFullYear(),now.getMonth(),now.getDate());
@@ -154,7 +147,7 @@ function R(){
     return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+t+'</span></div>'
   }).join("");
 
-  html='<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? Please WhatsApp or email us at +1 (315) 262-0362 | info@casapapellilo.com</p><div class="steps">'+stH+'</div>';
+  html=(IS_DEV?'<div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#c25050;text-transform:uppercase;margin-bottom:8px">Development / Stripe Test Mode</div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? Please WhatsApp or email us at +1 (315) 262-0362 | info@casapapellilo.com</p><div class="steps">'+stH+'</div>';
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){
@@ -296,18 +289,20 @@ window.pay=function(){
 
   var transportData=[];
   TRANSPORT.forEach(function(i){
-    if(S.tr[i.id])transportData.push({id:i.id,name:i.nm,desc:i.ds,price:String(i.pr),qty:String(S.tr[i.id]||1)});
+    if(S.tr[i.id])transportData.push({id:i.id,qty:String(S.tr[i.id]||1)});
   });
 
-  var b=getNB();
   var payload={
     action:"create_checkout",
     checkIn:fd(S.ci),
     checkOut:fd(S.co),
-    nights:String(nts()),
     guests:String(S.guests),
-    highNights:String(b.high),
-    lowNights:String(b.low),
+
+    // These are NOT trusted for pricing. The backend only compares them
+    // with the current Sheet values to detect a stale browser session.
+    displayedRateLow:String(RATE_L),
+    displayedRateHigh:String(RATE_H),
+
     transport:transportData,
     name:S.name,
     email:S.email,
@@ -321,20 +316,75 @@ window.pay=function(){
     if(data.success&&data.url){
       window.top.location.href=data.url;
     }else{
-      S.err="Payment setup failed: "+(data.message||"Please try again.");S.sending=false;R();
+      S.err=(data&&data.code==="RATES_CHANGED")
+        ?"Rates changed while this page was open. Please refresh the page before continuing."
+        :"Payment setup failed: "+(data.message||"Please try again.");
+      S.sending=false;R();
     }
   })
   .catch(function(e){
     S.err="Connection error. Please try again.";S.sending=false;R();
   });
 };
-window.resetAll=function(){S.ci=null;S.co=null;S.sel="in";S.guests=1;S.step=0;S.name="";S.email="";S.phone="";S.notes="";S.err="";S.tr={};S.sending=false;R()};
+window.resetAll=function(){
+  S.ci=null;S.co=null;S.sel="in";S.guests=1;S.step=0;
+  S.name="";S.email="";S.phone="";S.notes="";S.err="";
+  S.tr={};S.sending=false;R();
+};
 
-window.resetAll=function(){S.ci=null;S.co=null;S.sel="in";S.guests=1;S.step=0;S.name="";S.email="";S.phone="";S.notes="";S.err="";S.tr={};S.sending=false;R()};
-fetch(API_URL+"?action=blocked_dates")
-.then(function(r){return r.json()})
-.then(function(dates){BOOKED=dates;R();})
-.catch(function(){R();});
+function loadBookingData(){
+  Promise.all([
+    fetch(API_URL+"?action=config").then(function(r){
+      if(!r.ok)throw new Error("Config request failed");
+      return r.json();
+    }),
+    fetch(API_URL+"?action=blocked_dates").then(function(r){
+      if(!r.ok)throw new Error("Blocked dates request failed");
+      return r.json();
+    })
+  ])
+  .then(function(results){
+    var cfg=results[0];
+    var dates=results[1];
+
+    if(!cfg||cfg.success!==true){
+      throw new Error((cfg&&cfg.message)||"Invalid config response");
+    }
+
+    if(cfg.stripeMode!==EXPECTED_STRIPE_MODE){
+      throw new Error(
+        "Safety check failed: expected Stripe "+EXPECTED_STRIPE_MODE+
+        " mode but backend reported "+String(cfg.stripeMode)+"."
+      );
+    }
+
+    RATE_L=Number(cfg.rates.low);
+    RATE_H=Number(cfg.rates.high);
+    MIN_L=Number(cfg.minimumNights.low);
+    MIN_H=Number(cfg.minimumNights.high);
+    HIGH_SEASON=Array.isArray(cfg.highSeasons)?cfg.highSeasons:[];
+
+    TRANSPORT=(Array.isArray(cfg.transportation)?cfg.transportation:[]).map(function(i){
+      return {
+        id:i.id,
+        nm:i.name,
+        ds:i.desc,
+        pr:Number(i.price)
+      };
+    });
+
+    BOOKED=Array.isArray(dates)?dates:[];
+    R();
+  })
+  .catch(function(err){
+    document.getElementById("app").innerHTML=
+      '<div class="err">Booking system unavailable: '+
+      String(err.message||err)+
+      '</div>';
+  });
+}
+
+loadBookingData();
 
 if(typeof ResizeObserver!=="undefined"){try{new ResizeObserver(function(){window.parent.postMessage({type:"resize",height:document.body.scrollHeight},"*")}).observe(document.body)}catch(e){}}
 

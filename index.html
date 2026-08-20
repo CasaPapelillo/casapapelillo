@@ -101,6 +101,8 @@ var RATE_H=0;
 var RATE_L=0;
 var MIN_H=1;
 var MIN_L=1;
+var MIN_LEAD_DAYS=0;
+var MAX_LEAD_DAYS=365;
 var MO=["January","February","March","April","May","June","July","August","September","October","November","December"];
 var DY=["Mo","Tu","We","Th","Fr","Sa","Su"];
 
@@ -126,6 +128,18 @@ function pd(s){var p=s.split("-");return new Date(+p[0],+p[1]-1,+p[2])}
 function fd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function fD(d){return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
 function aD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r}
+function minCheckInDate(){return aD(todayC,MIN_LEAD_DAYS)}
+function maxCheckInDate(){return aD(todayC,MAX_LEAD_DAYS)}
+function checkInWithinLeadWindow(d){return d>=minCheckInDate()&&d<=maxCheckInDate()}
+function leadWindowMessage(){
+  if(MIN_LEAD_DAYS===MAX_LEAD_DAYS)return"Check-in must be exactly "+MIN_LEAD_DAYS+" day"+(MIN_LEAD_DAYS===1?"":"s")+" from today.";
+  return"Check-in must be between "+fD(minCheckInDate())+" and "+fD(maxCheckInDate())+".";
+}
+function highSeasonLabels(){
+  var seen={},labels=[];
+  HIGH_SEASON.forEach(function(s){var label=String(s.label||"").trim();if(label&&!seen[label]){seen[label]=true;labels.push(label)}});
+  return labels.length?labels.join(" · "):"Configured high-season dates";
+}
 function sm(a,b){return a&&b&&fd(a)===fd(b)}
 function df(a,b){return Math.round((b-a)/864e5)}
 function inR(d,s,e){return d>=pd(s)&&d<=pd(e)}
@@ -161,7 +175,7 @@ function R(){
     return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+t+'</span></div>'
   }).join("");
 
-  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? Please WhatsApp or email us at +1 (315) 262-0362 | info@casapapellilo.com</p><div class="steps">'+stH+'</div>';
+  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? Please WhatsApp or email us at +1 (315) 262-0362 | info@casapapelillo.com</p><div class="steps">'+stH+'</div>';
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){
@@ -170,12 +184,15 @@ function R(){
     days.forEach(function(date){
       if(!date){dH+='<div class="cd past"></div>';return}
       var bk=iB(date),past=date<todayC,high=gH(date);
+      var choosingCheckIn=S.sel==="in"||(S.ci&&S.co);
+      var leadBlocked=choosingCheckIn&&!checkInWithinLeadWindow(date);
+      var unavailable=past||leadBlocked;
       var inSl=S.ci&&(S.co?(date>=S.ci&&date<=S.co):sm(date,S.ci));
       var isCi=sm(date,S.ci),isCo=sm(date,S.co);
       var cls="cd";
-      if(past)cls+=" past";else if(bk)cls+=" booked";else if(isCi||isCo)cls+=" ep";else if(inSl)cls+=" sel";else if(high)cls+=" high";
-      var dot=high&&!bk&&!past&&!inSl&&!isCi&&!isCo?'<div class="hdot"></div>':"";
-      var oc=!past&&!bk?' onclick="hDay('+date.getTime()+')"':"";
+      if(unavailable)cls+=" past";else if(bk)cls+=" booked";else if(isCi||isCo)cls+=" ep";else if(inSl)cls+=" sel";else if(high)cls+=" high";
+      var dot=high&&!bk&&!unavailable&&!inSl&&!isCi&&!isCo?'<div class="hdot"></div>':"";
+      var oc=!unavailable&&!bk?' onclick="hDay('+date.getTime()+')"':"";
       dH+='<div class="'+cls+'"'+oc+'>'+date.getDate()+dot+'</div>';
     });
     var pH="";
@@ -198,8 +215,10 @@ function R(){
     html+='<div class="cal-box"><div class="cal-nav"><button class="cal-arr" onclick="pM()">‹</button><span class="cal-month">'+MO[S.vM]+' '+S.vY+'</span><button class="cal-arr" onclick="nM()">›</button></div>'
       +'<div class="legend"><span class="leg"><span class="legd" style="background:#4a8c3f"></span>Available</span><span class="leg"><span class="legd" style="background:#c25050"></span>Booked</span><span class="leg"><span class="legd" style="background:#E8863A"></span>High Season</span></div>'
       +'<div class="cg">'+dH+'</div>'
-      +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON — 5 NIGHT MINIMUM</span><br><span class="sl2">Chinese New Year · Holy & Easter Week · Ondalinda · Christmas & New Year\'s</span></div>'
-      +'<div style="text-align:center;margin-top:6px"><span class="sb lo">LOW SEASON — 1 NIGHT MINIMUM</span><br><span class="sl2">All other dates</span></div>'
+      +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON — '+MIN_H+' NIGHT'+(MIN_H===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(highSeasonLabels())+'</span></div>'
+      +'<div style="text-align:center;margin-top:6px"><span class="sb lo">LOW SEASON — '+MIN_L+' NIGHT'+(MIN_L===1?'':'S')+' MINIMUM</span><br><span class="sl2">All other dates</span></div>'
+      +'<div style="text-align:center;margin-top:8px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance</span></div>'
+      +'<div style="text-align:center;margin-top:4px"><span class="sl2">Check-in window: '+eH(fD(minCheckInDate()))+' — '+eH(fD(maxCheckInDate()))+'</span></div>'
       +'<div style="text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid #eee"><span style="font-size:10px;font-weight:700;letter-spacing:2px;color:#1a1a2e;text-transform:uppercase">Cancellation Policy</span><br>'
       +'<span style="font-size:11px;color:#aaa">High Season — Full refund if cancelled &gt;60 days before arrival</span><br>'
       +'<span style="font-size:11px;color:#aaa">Low Season — Full refund if cancelled &gt;30 days before arrival</span><br>'
@@ -298,13 +317,22 @@ window.pM=function(){if(S.vM===0){S.vM=11;S.vY--}else S.vM--;R()};
 window.nM=function(){if(S.vM===11){S.vM=0;S.vY++}else S.vM++;R()};
 
 window.hDay=function(ts){
-  var date=new Date(ts);if(iB(date)||date<todayC)return;S.err="";
-  if(S.sel==="in"||(S.ci&&S.co)){S.ci=date;S.co=null;S.sel="out"}
+  var date=new Date(ts);
+  if(iB(date)||date<todayC)return;
+  S.err="";
+
+  if(S.sel==="in"||(S.ci&&S.co)){
+    if(!checkInWithinLeadWindow(date)){S.err=leadWindowMessage();R();return}
+    S.ci=date;S.co=null;S.sel="out";
+  }
   else{
-    if(date<=S.ci){S.ci=date;S.co=null;R();return}
+    if(date<=S.ci){
+      if(!checkInWithinLeadWindow(date)){S.err=leadWindowMessage();R();return}
+      S.ci=date;S.co=null;S.sel="out";R();return;
+    }
     if(hB(S.ci,date)){S.err="Selected dates overlap with an existing reservation.";R();return}
     var n=df(S.ci,date),se=gS(S.ci,date),min=se==="high"?MIN_H:MIN_L;
-    if(n<min){S.err="Minimum stay is "+min+" nights during "+se+" season.";R();return}
+    if(n<min){S.err="Minimum stay is "+min+" night"+(min===1?"":"s")+" during "+se+" season.";R();return}
     S.co=date;S.sel="in";
   }
   R();
@@ -403,6 +431,16 @@ function loadBookingData(){
     RATE_H=Number(cfg.rates.high);
     MIN_L=Number(cfg.minimumNights.low);
     MIN_H=Number(cfg.minimumNights.high);
+    MIN_LEAD_DAYS=Number(cfg.minLeadDays);
+    MAX_LEAD_DAYS=Number(cfg.maxLeadDays);
+
+    if(!Number.isInteger(MIN_LEAD_DAYS)||MIN_LEAD_DAYS<0){
+      throw new Error("Invalid MIN_LEAD_DAYS from backend.");
+    }
+    if(!Number.isInteger(MAX_LEAD_DAYS)||MAX_LEAD_DAYS<MIN_LEAD_DAYS){
+      throw new Error("Invalid MAX_LEAD_DAYS from backend.");
+    }
+
     HIGH_SEASON=Array.isArray(cfg.highSeasons)?cfg.highSeasons:[];
 
     TRANSPORT=(Array.isArray(cfg.transportation)?cfg.transportation:[]).map(function(i){

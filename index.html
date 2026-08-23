@@ -268,7 +268,7 @@ function R(){
     if(b.low>0)segs.push(["Low",b.low,RATE_L]);
     var acL="";
     if(segs.length>1){
-      acL=segs.map(function(s){return '<div class="sr"><span class="sk">'+s[1]+' nights '+s[0]+' × '+f$(s[2])+'</span><span class="sv">'+f$(s[1]*s[2])+'</span></div>'}).join("");
+      acL=segs.map(function(s){return '<div class="sr"><span class="sk">'+s[1]+' night'+(s[1]>1?'s':'')+' '+s[0]+' × '+f$(s[2])+'</span><span class="sv">'+f$(s[1]*s[2])+'</span></div>'}).join("");
     }else{
       acL='<div class="sr"><span class="sk">Accommodation ('+(segs.length?segs[0][0]:"Low")+' Season)</span><span class="sv">'+f$(rTot())+'</span></div>';
     }

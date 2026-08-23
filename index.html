@@ -205,21 +205,23 @@ function R(){
     if(S.ci){
       pH='<div class="pb"><div class="pr"><span class="pk">Check-in</span><span class="pv">'+fD(S.ci)+'</span></div>';
       if(S.co){
-        var b=getNB(),mixed=b.high>0&&b.low>0,bkH="";
-        if(mixed){
-          bkH='<div class="pr"><span class="pk">'+b.high+' night'+(b.high>1?"s":"")+" × "+f$(RATE_H)+' <span style="font-size:10px;color:#E8863A;letter-spacing:1px">HIGH</span></span><span class="pv">'+f$(b.high*RATE_H)+' USD</span></div>';
-          bkH+='<div class="pr"><span class="pk">'+b.low+' night'+(b.low>1?"s":"")+" × "+f$(RATE_L)+' <span style="font-size:10px;color:#999;letter-spacing:1px">LOW</span></span><span class="pv">'+f$(b.low*RATE_L)+' USD</span></div>';
+        var b=getNB(),segs=[],bkH="";
+        if(b.high>0)segs.push(["High",b.high,RATE_H,"#E8863A"]);
+        if(b.mid>0)segs.push(["Mid",b.mid,RATE_M,"#C08A5E"]);
+        if(b.low>0)segs.push(["Low",b.low,RATE_L,"#999"]);
+        if(segs.length>1){
+          bkH=segs.map(function(s){return '<div class="pr"><span class="pk">'+s[1]+' night'+(s[1]>1?"s":"")+" × "+f$(s[2])+' <span style="font-size:10px;color:'+s[3]+';letter-spacing:1px">'+s[0].toUpperCase()+'</span></span><span class="pv">'+f$(s[1]*s[2])+' USD</span></div>'}).join("");
         }else{
-          bkH='<div class="pr"><span class="pk">'+nts()+' nights × '+f$(b.high>0?RATE_H:RATE_L)+'</span><span class="pv">'+f$(rTot())+' USD</span></div>';
+          bkH='<div class="pr"><span class="pk">'+nts()+' nights × '+f$(segs.length?segs[0][2]:RATE_L)+'</span><span class="pv">'+f$(rTot())+' USD</span></div>';
         }
         pH+='<div class="pr"><span class="pk">Check-out</span><span class="pv">'+fD(S.co)+'</span></div>'+bkH
           +'<div class="pr" style="border-top:1px solid #eee;margin-top:4px;padding-top:8px"><span class="pk">'+nts()+' nights total</span><span class="pv t">'+f$(rTot())+' USD</span></div>'
-          +'<div class="stag">'+(mixed?"Mixed Season":b.high>0?"High Season"+(hi?" — "+hi.label:""):"Low Season")+'</div>';
+          +'<div class="stag">'+(segs.length>1?"Mixed Season":(segs.length?segs[0][0]+" Season"+(segs[0][0]==="High"&&hi?" — "+hi.label:""):"Low Season"))+'</div>';
       }else{pH+='<div class="hint">Select check-out date</div>'}
       pH+='</div>';
     }
     html+='<div class="cal-box"><div class="cal-nav"><button class="cal-arr" onclick="pM()">‹</button><span class="cal-month">'+MO[S.vM]+' '+S.vY+'</span><button class="cal-arr" onclick="nM()">›</button></div>'
-      +'<div class="legend"><span class="leg"><span class="legd" style="background:#4a8c3f"></span>Available</span><span class="leg"><span class="legd" style="background:#c25050"></span>Booked</span><span class="leg"><span class="legd" style="background:#E8863A"></span>High Season</span></div>'
+      +'<div class="legend"><span class="leg"><span class="legd" style="background:#4a8c3f"></span>Available</span><span class="leg"><span class="legd" style="background:#c25050"></span>Booked</span><span class="leg"><span class="legd" style="background:#E8863A"></span>High Season</span>'+(MID_SEASON.length?'<span class="leg"><span class="legd" style="background:#C08A5E"></span>Mid Season</span>':"")+'</div>'
       +'<div class="cg">'+dH+'</div>'
       +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON — '+MIN_H+' NIGHT'+(MIN_H===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(highSeasonLabels())+'</span></div>'
       +(MID_SEASON.length?'<div style="text-align:center;margin-top:6px"><span class="sb md">MID SEASON — '+MIN_M+' NIGHT'+(MIN_M===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(midWindow())+', outside high season</span></div>':"")

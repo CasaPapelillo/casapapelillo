@@ -31,12 +31,13 @@ h1 span{color:#E8863A;font-style:italic}
 .cdh{text-align:center;font-size:10px;font-weight:700;color:#aaa;padding:4px 0;letter-spacing:1px}
 .cd{text-align:center;padding:10px 4px;border-radius:4px;font-size:13px;position:relative;cursor:pointer;border:1px solid transparent;user-select:none}
 .cd.past{opacity:.25;cursor:default}.cd.booked{background:#fde8e8;color:#c25050;cursor:default}
-.cd.high{background:#fdf8f3;border-color:#f0dcc8}.cd.sel{background:#fef0e5;color:#E8863A;font-weight:600;border-color:#E8863A}
+.cd.high{background:#fdf8f3;border-color:#f0dcc8}.cd.mid{background:#fdfbf7;border-color:#efe4d6}.cd.sel{background:#fef0e5;color:#E8863A;font-weight:600;border-color:#E8863A}
 .cd.ep{background:#E8863A;color:#fff;font-weight:700;border-color:#E8863A}
 .cd:not(.past):not(.booked):hover{background:#fef0e5}
 .hdot{width:4px;height:4px;border-radius:50%;background:#E8863A;margin:2px auto 0;opacity:.5}
+.mdot{width:4px;height:4px;border-radius:50%;background:#C08A5E;margin:2px auto 0;opacity:.45}
 .cfoot{margin-top:14px}
-.sb{font-size:9px;font-weight:700;letter-spacing:2px;color:#E8863A;text-transform:uppercase}.sb.lo{color:#999}
+.sb{font-size:9px;font-weight:700;letter-spacing:2px;color:#E8863A;text-transform:uppercase}.sb.md{color:#C08A5E}.sb.lo{color:#999}
 .sl2{font-size:11px;color:#aaa}
 .pb{background:#fafaf8;border:1px solid #eee;border-radius:6px;padding:16px;margin-bottom:16px}
 .pr{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
@@ -96,10 +97,13 @@ document.addEventListener("DOMContentLoaded",function(){
 
 /* ═══ DATA ═══ */
 var HIGH_SEASON=[];
+var MID_SEASON=[];
 var BOOKED=[];
 var RATE_H=0;
+var RATE_M=0;
 var RATE_L=0;
 var MIN_H=1;
+var MIN_M=1;
 var MIN_L=1;
 var MIN_LEAD_DAYS=0;
 var MAX_LEAD_DAYS=365;
@@ -144,9 +148,11 @@ function sm(a,b){return a&&b&&fd(a)===fd(b)}
 function df(a,b){return Math.round((b-a)/864e5)}
 function inR(d,s,e){return d>=pd(s)&&d<=pd(e)}
 function gH(d){for(var i=0;i<HIGH_SEASON.length;i++)if(inR(d,HIGH_SEASON[i].start,HIGH_SEASON[i].end))return HIGH_SEASON[i];return null}
+function gM(d){if(gH(d))return null;for(var i=0;i<MID_SEASON.length;i++)if(inR(d,MID_SEASON[i].start,MID_SEASON[i].end))return MID_SEASON[i];return null}
+function midWindow(){if(!MID_SEASON.length)return"";var s=MID_SEASON[0].start,e=MID_SEASON[0].end,i;for(i=1;i<MID_SEASON.length;i++){if(MID_SEASON[i].start<s)s=MID_SEASON[i].start;if(MID_SEASON[i].end>e)e=MID_SEASON[i].end}var M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];function f(x){var p=String(x).split("-");return M[Number(p[1])-1]+" "+Number(p[2])}return f(s)+" – "+f(e)}
 function iB(d){for(var i=0;i<BOOKED.length;i++)if(inR(d,BOOKED[i].start,BOOKED[i].end))return true;return false}
 function hB(s,e){var d=new Date(s);while(d<=e){if(iB(d))return true;d=aD(d,1)}return false}
-function gS(ci,co){var d=new Date(ci),h=0,l=0;while(d<co){gH(d)?h++:l++;d=aD(d,1)}return h>=l?"high":"low"}
+function gS(ci,co){var d=new Date(ci),h=0,m=0,l=0;while(d<co){gH(d)?h++:(gM(d)?m++:l++);d=aD(d,1)}return h>=m&&h>=l?"high":(m>=l?"mid":"low")}
 function cDays(y,m){var f=new Date(y,m,1),last=new Date(y,m+1,0).getDate();var dow=f.getDay();if(dow===0)dow=7;var days=[];for(var i=1;i<dow;i++)days.push(null);for(var d=1;d<=last;d++)days.push(new Date(y,m,d));return days}
 function f$(n){return"$"+n.toLocaleString()}
 function eH(v){
@@ -159,8 +165,8 @@ function eH(v){
 }
 
 function nts(){return S.ci&&S.co?df(S.ci,S.co):0}
-function getNB(){if(!S.ci||!S.co)return{high:0,low:0};var h=0,l=0,d=new Date(S.ci);while(d<S.co){gH(d)?h++:l++;d=aD(d,1)}return{high:h,low:l}}
-function rTot(){var b=getNB();return b.high*RATE_H+b.low*RATE_L}
+function getNB(){if(!S.ci||!S.co)return{high:0,mid:0,low:0};var h=0,m=0,l=0,d=new Date(S.ci);while(d<S.co){gH(d)?h++:(gM(d)?m++:l++);d=aD(d,1)}return{high:h,mid:m,low:l}}
+function rTot(){var b=getNB();return b.high*RATE_H+b.mid*RATE_M+b.low*RATE_L}
 function tTot(){var t=0;TRANSPORT.forEach(function(i){if(S.tr[i.id])t+=i.pr*(S.tr[i.id]||1)});return t}
 function gTot(){return rTot()+tTot()}
 
@@ -183,15 +189,15 @@ function R(){
     var dH=DY.map(function(d){return'<div class="cdh">'+d+'</div>'}).join("");
     days.forEach(function(date){
       if(!date){dH+='<div class="cd past"></div>';return}
-      var bk=iB(date),past=date<todayC,high=gH(date);
+      var bk=iB(date),past=date<todayC,high=gH(date),mid=gM(date);
       var choosingCheckIn=S.sel==="in"||(S.ci&&S.co);
       var leadBlocked=choosingCheckIn&&!checkInWithinLeadWindow(date);
       var unavailable=past||leadBlocked;
       var inSl=S.ci&&(S.co?(date>=S.ci&&date<=S.co):sm(date,S.ci));
       var isCi=sm(date,S.ci),isCo=sm(date,S.co);
       var cls="cd";
-      if(unavailable)cls+=" past";else if(bk)cls+=" booked";else if(isCi||isCo)cls+=" ep";else if(inSl)cls+=" sel";else if(high)cls+=" high";
-      var dot=high&&!bk&&!unavailable&&!inSl&&!isCi&&!isCo?'<div class="hdot"></div>':"";
+      if(unavailable)cls+=" past";else if(bk)cls+=" booked";else if(isCi||isCo)cls+=" ep";else if(inSl)cls+=" sel";else if(high)cls+=" high";else if(mid)cls+=" mid";
+      var free=!bk&&!unavailable&&!inSl&&!isCi&&!isCo;var dot=high&&free?'<div class="hdot"></div>':(mid&&free?'<div class="mdot"></div>':"");
       var oc=!unavailable&&!bk?' onclick="hDay('+date.getTime()+')"':"";
       dH+='<div class="'+cls+'"'+oc+'>'+date.getDate()+dot+'</div>';
     });
@@ -216,6 +222,7 @@ function R(){
       +'<div class="legend"><span class="leg"><span class="legd" style="background:#4a8c3f"></span>Available</span><span class="leg"><span class="legd" style="background:#c25050"></span>Booked</span><span class="leg"><span class="legd" style="background:#E8863A"></span>High Season</span></div>'
       +'<div class="cg">'+dH+'</div>'
       +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON — '+MIN_H+' NIGHT'+(MIN_H===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(highSeasonLabels())+'</span></div>'
+      +(MID_SEASON.length?'<div style="text-align:center;margin-top:6px"><span class="sb md">MID SEASON — '+MIN_M+' NIGHT'+(MIN_M===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(midWindow())+', outside high season</span></div>':"")
       +'<div style="text-align:center;margin-top:6px"><span class="sb lo">LOW SEASON — '+MIN_L+' NIGHT'+(MIN_L===1?'':'S')+' MINIMUM</span><br><span class="sl2">All other dates</span></div>'
       +'<div style="text-align:center;margin-top:8px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance</span></div>'
       +'<div style="text-align:center;margin-top:4px"><span class="sl2">Check-in window: '+eH(fD(minCheckInDate()))+' — '+eH(fD(maxCheckInDate()))+'</span></div>'
@@ -253,13 +260,15 @@ function R(){
 
   /* ═══ STEP 2: CONTACT ═══ */
   if(S.step===2){
-    var b=getNB(),mixed=b.high>0&&b.low>0;
+    var b=getNB(),segs=[];
+    if(b.high>0)segs.push(["High",b.high,RATE_H]);
+    if(b.mid>0)segs.push(["Mid",b.mid,RATE_M]);
+    if(b.low>0)segs.push(["Low",b.low,RATE_L]);
     var acL="";
-    if(mixed){
-      acL='<div class="sr"><span class="sk">'+b.high+' nights High × '+f$(RATE_H)+'</span><span class="sv">'+f$(b.high*RATE_H)+'</span></div>'
-        +'<div class="sr"><span class="sk">'+b.low+' nights Low × '+f$(RATE_L)+'</span><span class="sv">'+f$(b.low*RATE_L)+'</span></div>';
+    if(segs.length>1){
+      acL=segs.map(function(s){return '<div class="sr"><span class="sk">'+s[1]+' nights '+s[0]+' × '+f$(s[2])+'</span><span class="sv">'+f$(s[1]*s[2])+'</span></div>'}).join("");
     }else{
-      acL='<div class="sr"><span class="sk">Accommodation ('+(b.high>0?"High":"Low")+' Season)</span><span class="sv">'+f$(rTot())+'</span></div>';
+      acL='<div class="sr"><span class="sk">Accommodation ('+(segs.length?segs[0][0]:"Low")+' Season)</span><span class="sv">'+f$(rTot())+'</span></div>';
     }
     var trL="";
     TRANSPORT.forEach(function(i){if(S.tr[i.id]){var q=S.tr[i.id]||1;trL+='<div class="sr"><span class="sk">'+i.nm+(q>1?" ×"+q:"")+'</span><span class="sv">'+f$(i.pr*q)+'</span></div>'}});
@@ -331,7 +340,7 @@ window.hDay=function(ts){
       S.ci=date;S.co=null;S.sel="out";R();return;
     }
     if(hB(S.ci,date)){S.err="Selected dates overlap with an existing reservation.";R();return}
-    var n=df(S.ci,date),se=gS(S.ci,date),min=se==="high"?MIN_H:MIN_L;
+    var n=df(S.ci,date),se=gS(S.ci,date),min=se==="high"?MIN_H:(se==="mid"?MIN_M:MIN_L);
     if(n<min){S.err="Minimum stay is "+min+" night"+(min===1?"":"s")+" during "+se+" season.";R();return}
     S.co=date;S.sel="in";
   }
@@ -370,6 +379,7 @@ window.pay=function(){
     // These are NOT trusted for pricing. The backend only compares them
     // with the current Sheet values to detect a stale browser session.
     displayedRateLow:String(RATE_L),
+    displayedRateMid:String(RATE_M),
     displayedRateHigh:String(RATE_H),
 
     transport:transportData,
@@ -428,8 +438,10 @@ function loadBookingData(){
     }
 
     RATE_L=Number(cfg.rates.low);
+    RATE_M=Number(cfg.rates.mid!=null?cfg.rates.mid:cfg.rates.low);
     RATE_H=Number(cfg.rates.high);
     MIN_L=Number(cfg.minimumNights.low);
+    MIN_M=Number(cfg.minimumNights.mid!=null?cfg.minimumNights.mid:cfg.minimumNights.low);
     MIN_H=Number(cfg.minimumNights.high);
     MIN_LEAD_DAYS=Number(cfg.minLeadDays);
     MAX_LEAD_DAYS=Number(cfg.maxLeadDays);
@@ -442,6 +454,7 @@ function loadBookingData(){
     }
 
     HIGH_SEASON=Array.isArray(cfg.highSeasons)?cfg.highSeasons:[];
+    MID_SEASON=Array.isArray(cfg.midSeasons)?cfg.midSeasons:[];
 
     TRANSPORT=(Array.isArray(cfg.transportation)?cfg.transportation:[]).map(function(i){
       return {

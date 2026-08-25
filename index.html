@@ -224,10 +224,9 @@ function R(){
       +'<div class="legend"><span class="leg"><span class="legd" style="background:#4a8c3f"></span>Available</span><span class="leg"><span class="legd" style="background:#c25050"></span>Booked</span><span class="leg"><span class="legd" style="background:#E8863A"></span>High Season</span>'+(MID_SEASON.length?'<span class="leg"><span class="legd" style="background:#C08A5E"></span>Mid Season</span>':"")+'</div>'
       +'<div class="cg">'+dH+'</div>'
       +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON — '+MIN_H+' NIGHT'+(MIN_H===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(highSeasonLabels())+'</span></div>'
-      +(MID_SEASON.length?'<div style="text-align:center;margin-top:6px"><span class="sb md">MID SEASON — '+MIN_M+' NIGHT'+(MIN_M===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(midWindow())+', outside high season</span></div>':"")
+      +(MID_SEASON.length?'<div style="text-align:center;margin-top:6px"><span class="sb md">MID SEASON — '+MIN_M+' NIGHT'+(MIN_M===1?'':'S')+' MINIMUM</span><br><span class="sl2">All days btw Nov-1st and Apr-30th outside High Season</span></div>':"")
       +'<div style="text-align:center;margin-top:6px"><span class="sb lo">LOW SEASON — '+MIN_L+' NIGHT'+(MIN_L===1?'':'S')+' MINIMUM</span><br><span class="sl2">All other dates</span></div>'
       +'<div style="text-align:center;margin-top:8px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance</span></div>'
-      +'<div style="text-align:center;margin-top:4px"><span class="sl2">Check-in window: '+eH(fD(minCheckInDate()))+' — '+eH(fD(maxCheckInDate()))+'</span></div>'
       +'<div style="text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid #eee"><span style="font-size:10px;font-weight:700;letter-spacing:2px;color:#1a1a2e;text-transform:uppercase">Cancellation Policy</span><br>'
       +'<span style="font-size:11px;color:#aaa">High Season — Full refund if cancelled &gt;60 days before arrival</span><br>'
       +'<span style="font-size:11px;color:#aaa">Mid &amp; Low Season — Full refund if cancelled &gt;30 days before arrival</span><br>'

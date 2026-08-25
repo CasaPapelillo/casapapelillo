@@ -87,6 +87,10 @@ textarea{min-height:80px;resize:vertical}
 .spacer{flex:1}
 .stripe-badge{text-align:center;margin-top:12px;font-size:11px;color:#aaa}
 .stripe-badge img{height:20px;vertical-align:middle;margin-left:4px}
+.agree{display:flex;gap:10px;align-items:flex-start;margin:14px 0 2px;font-size:13px;line-height:1.45;color:#444;cursor:pointer}
+.agree input{width:16px;height:16px;margin-top:2px;flex:0 0 auto;accent-color:#E8863A;cursor:pointer}
+.agree a{color:#E8863A}
+.agree .req{color:#c25050;font-weight:700}
 @media(max-width:480px){.wrap{padding:24px 16px}.steps{gap:10px}.stxt{font-size:11px}}
 </style>
 </head>
@@ -118,13 +122,14 @@ var API_URL=IS_DEV
   : "https://script.google.com/macros/s/AKfycbzZ0xnhLaCKd3gsRSOPjFSPMAQF3IlWgNCo3BP5SXLdHCbMYPtJk_zZRWzPL9JC5Xk/exec";
 var EXPECTED_STRIPE_MODE=IS_DEV?"test":"live";
 if(IS_DEV)document.title="TEST — Reserve Casa Papelillo";
+var AGREEMENT_URL="https://docs.google.com/document/d/1iyuQHl9gwWmufW1u3fTig5gausDwj2C1YWOA7mdJdKM/preview";
 
 // Kept for compatibility with the existing widget; Stripe Checkout itself
 // is created server-side and redirected via data.url.
 var STRIPE_PK="pk_live_51TTqRK05yZTOTSGOqszWPCzx3TWZEXY0QJvp2twVeL1ukk40WhlNIa9HnSd6w7BZt31uPDazzx3ySM25SwD0xW3P00VT1Sgk5E";
   
 var now=new Date(),todayC=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false};
+var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false,agreed:false};
 window.S=S;
 
 /* ═══ HELPERS ═══ */
@@ -284,6 +289,7 @@ function R(){
       +acL+trL
       +'<div class="sr tot"><span class="sk">Total to Pay</span><span class="sv">'+f$(gTot())+' USD</span></div></div>'
       +(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':'')
+      +'<label class="agree"><input type="checkbox" id="agreeBox"'+(S.agreed?' checked':'')+' onchange="S.agreed=this.checked;syncPayButton()"><span>I have read and accept the <a href="'+AGREEMENT_URL+'" target="_blank" rel="noopener">Vacation Rental &amp; Liability Waiver Agreement</a>, including the assumption of risk and release of liability. <span class="req">*</span></span></label>'
       +'<div class="stripe-badge">Secure payment powered by Stripe</div>';
   }
 
@@ -310,8 +316,15 @@ function contactReady(){
   if(emailInput)emailOk=emailOk&&emailInput.checkValidity();
   else emailOk=emailOk&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.email.trim());
 
-  return nameOk&&emailOk&&phoneOk;
+  return nameOk&&emailOk&&phoneOk&&S.agreed===true;
 }
+function emailValid(){
+  if(!S.email.trim())return false;
+  var el=document.getElementById("contactEmail");
+  if(el)return el.checkValidity();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.email.trim());
+}
+
 
 window.syncPayButton=function(){
   var btn=document.getElementById("payBtn");
@@ -360,7 +373,9 @@ window.pay=function(){
   if(!contactReady()){
     S.err=!S.name.trim()||!S.email.trim()||!S.phone.trim()
       ?"Please fill in all required fields."
-      :"Please enter a valid email address.";
+      :!emailValid()
+      ?"Please enter a valid email address."
+      :"Please tick the box to accept the Rental & Liability Waiver Agreement.";
     R();return
   }
   if(S.sending)return;
@@ -387,7 +402,9 @@ window.pay=function(){
     name:S.name,
     email:S.email,
     phone:S.phone,
-    notes:S.notes
+    notes:S.notes,
+    agreementAccepted:S.agreed===true,
+    acceptedAt:new Date().toISOString()
   };
 
   fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(payload)})

@@ -124,6 +124,17 @@ var EXPECTED_STRIPE_MODE=IS_DEV?"test":"live";
 if(IS_DEV)document.title="TEST — Reserve Casa Papelillo";
 var AGREEMENT_URL="https://docs.google.com/document/d/1S3w7yzGJyRtWsB7udHsWQWnfqc7GrhOW3bqHtBrCFto/preview";
 
+/* reCAPTCHA v3. Paste the SITE key from google.com/recaptcha here; the matching
+   SECRET key goes in the Apps Script properties as RECAPTCHA_SECRET. While this
+   is empty the widget behaves exactly as before — nothing loads, nothing breaks. */
+var RECAPTCHA_SITE_KEY="";
+if(RECAPTCHA_SITE_KEY){
+  var rcS=document.createElement("script");
+  rcS.src="https://www.google.com/recaptcha/api.js?render="+encodeURIComponent(RECAPTCHA_SITE_KEY);
+  rcS.async=true;rcS.defer=true;
+  document.head.appendChild(rcS);
+}
+
 // Kept for compatibility with the existing widget; Stripe Checkout itself
 // is created server-side and redirected via data.url.
 var STRIPE_PK="pk_live_51TTqRK05yZTOTSGOqszWPCzx3TWZEXY0QJvp2twVeL1ukk40WhlNIa9HnSd6w7BZt31uPDazzx3ySM25SwD0xW3P00VT1Sgk5E";
@@ -369,6 +380,21 @@ window.goN=function(){
   S.step++;S.err="";R();
 };
 
+/* Fetches a reCAPTCHA token, then hands it to cb. Any problem — no key, script
+   blocked, Google slow — calls back with "" so a real guest is never stuck; the
+   backend decides what an empty token means. */
+function withRecaptcha(cb){
+  if(!RECAPTCHA_SITE_KEY||!window.grecaptcha||!window.grecaptcha.execute){cb("");return}
+  var done=false,finish=function(tk){if(done)return;done=true;cb(tk||"")};
+  setTimeout(function(){finish("")},6000);
+  try{
+    grecaptcha.ready(function(){
+      grecaptcha.execute(RECAPTCHA_SITE_KEY,{action:"checkout"})
+        .then(function(tk){finish(tk)},function(){finish("")});
+    });
+  }catch(e){finish("")}
+}
+
 window.pay=function(){
   if(!contactReady()){
     S.err=!S.name.trim()||!S.email.trim()||!S.phone.trim()
@@ -407,20 +433,26 @@ window.pay=function(){
     acceptedAt:new Date().toISOString()
   };
 
-  fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(payload)})
-  .then(function(r){return r.json()})
-  .then(function(data){
-    if(data.success&&data.url){
-      window.top.location.href=data.url;
-    }else{
-      S.err=(data&&data.code==="RATES_CHANGED")
-        ?"Rates changed while this page was open. Please refresh the page before continuing."
-        :"Payment setup failed: "+(data.message||"Please try again.");
-      S.sending=false;R();
-    }
-  })
-  .catch(function(e){
-    S.err="Connection error. Please try again.";S.sending=false;R();
+  withRecaptcha(function(rcToken){
+    payload.recaptchaToken=rcToken;
+
+    fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(payload)})
+    .then(function(r){return r.json()})
+    .then(function(data){
+      if(data.success&&data.url){
+        window.top.location.href=data.url;
+      }else{
+        S.err=(data&&data.code==="RATES_CHANGED")
+          ?"Rates changed while this page was open. Please refresh the page before continuing."
+          :(data&&data.code==="RECAPTCHA_FAILED")
+          ?"We could not verify this request. Please refresh the page and try again."
+          :"Payment setup failed. "+(data.message||"Please try again.");
+        S.sending=false;R();
+      }
+    })
+    .catch(function(e){
+      S.err="Connection error. Please try again.";S.sending=false;R();
+    });
   });
 };
 window.resetAll=function(){

@@ -115,6 +115,8 @@ var MO=["January","February","March","April","May","June","July","August","Septe
 var DY=["Mo","Tu","We","Th","Fr","Sa","Su"];
 
 var TRANSPORT=[];
+var MAX_PETS=0;
+var PET_RATE=0;
 
 var IS_DEV=new URLSearchParams(window.location.search).get("env")==="dev";
 var API_URL=IS_DEV
@@ -136,7 +138,7 @@ if(RECAPTCHA_SITE_KEY){
 }
 
 var now=new Date(),todayC=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false,agreed:false};
+var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,pets:0,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false,agreed:false};
 window.S=S;
 
 /* ═══ HELPERS ═══ */
@@ -179,7 +181,8 @@ function nts(){return S.ci&&S.co?df(S.ci,S.co):0}
 function getNB(){if(!S.ci||!S.co)return{high:0,mid:0,low:0};var h=0,m=0,l=0,d=new Date(S.ci);while(d<S.co){gH(d)?h++:(gM(d)?m++:l++);d=aD(d,1)}return{high:h,mid:m,low:l}}
 function rTot(){var b=getNB();return b.high*RATE_H+b.mid*RATE_M+b.low*RATE_L}
 function tTot(){var t=0;TRANSPORT.forEach(function(i){if(S.tr[i.id])t+=i.pr*(S.tr[i.id]||1)});return t}
-function gTot(){return rTot()+tTot()}
+function petTot(){return (S.pets>0&&PET_RATE>0)?S.pets*PET_RATE*nts():0}
+function gTot(){return rTot()+tTot()+petTot()}
 
 /* ═══ RENDER ═══ */
 function R(){
@@ -246,6 +249,11 @@ function R(){
       +'<div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';
     for(var g=1;g<=12;g++)html+='<option value="'+g+'"'+(S.guests===g?' selected':'')+'>'+g+'</option>';
     html+='</select></div>';
+    if(MAX_PETS>0){
+      html+='<div class="fld"><label class="lbl">Pets</label><select onchange="S.pets=Number(this.value);R()">';
+      for(var p=0;p<=MAX_PETS;p++)html+='<option value="'+p+'"'+(S.pets===p?' selected':'')+'>'+p+'</option>';
+      html+='</select>'+(PET_RATE>0?'<span class="hint">'+f$(PET_RATE)+' per pet, per night</span>':'')+'</div>';
+    }
   }
 
   /* ═══ STEP 1: TRANSPORTATION ═══ */
@@ -282,6 +290,7 @@ function R(){
     }else{
       acL='<div class="sr"><span class="sk">Accommodation ('+(segs.length?segs[0][0]:"Low")+' Season)</span><span class="sv">'+f$(rTot())+'</span></div>';
     }
+    var petL=petTot()>0?'<div class="sr"><span class="sk">Pets \u00d7'+S.pets+' \u00d7 '+nts()+' night'+(nts()>1?"s":"")+'</span><span class="sv">'+f$(petTot())+'</span></div>':'';
     var trL="";
     TRANSPORT.forEach(function(i){if(S.tr[i.id]){var q=S.tr[i.id]||1;trL+='<div class="sr"><span class="sk">'+i.nm+(q>1?" ×"+q:"")+'</span><span class="sv">'+f$(i.pr*q)+'</span></div>'}});
 
@@ -292,7 +301,7 @@ function R(){
       +'<div class="fld"><label class="lbl" for="contactNotes">Special requests or notes</label><textarea id="contactNotes" oninput="S.notes=this.value" placeholder="Dietary needs, celebrations, special requests...">'+eH(S.notes)+'</textarea></div>'
       +'<div class="sbox"><div class="slbl">BOOKING SUMMARY</div>'
       +'<div class="sr"><span class="sk">'+fD(S.ci)+' — '+fD(S.co)+'</span><span class="sv">'+nts()+' nights · '+S.guests+' guest'+(S.guests>1?"s":"")+'</span></div>'
-      +acL+trL
+      +acL+trL+petL
       +'<div class="sr tot"><span class="sk">Total to Pay</span><span class="sv">'+f$(gTot())+' USD</span></div></div>'
       +(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':'')
       +'<label class="agree"><input type="checkbox" id="agreeBox"'+(S.agreed?' checked':'')+' onchange="S.agreed=this.checked;syncPayButton()"><span>I have read and accept the <a href="'+AGREEMENT_URL+'" target="_blank" rel="noopener">Vacation Rental &amp; Liability Waiver Agreement</a>, including the assumption of risk and release of liability. <span class="req">*</span></span></label>'
@@ -412,6 +421,7 @@ window.pay=function(){
     checkIn:fd(S.ci),
     checkOut:fd(S.co),
     guests:String(S.guests),
+    pets:String(S.pets),
 
     // These are NOT trusted for pricing. The backend only compares them
     // with the current Sheet values to detect a stale browser session.
@@ -477,6 +487,8 @@ function loadBookingData(){
     MIN_H=Number(cfg.minimumNights.high);
     MIN_LEAD_DAYS=Number(cfg.minLeadDays);
     MAX_LEAD_DAYS=Number(cfg.maxLeadDays);
+    MAX_PETS=Number(cfg.maxPets)||0;
+    PET_RATE=Number(cfg.petRate)||0;
 
     if(!Number.isInteger(MIN_LEAD_DAYS)||MIN_LEAD_DAYS<0){
       throw new Error("Invalid MIN_LEAD_DAYS from backend.");

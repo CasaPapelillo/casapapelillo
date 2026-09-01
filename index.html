@@ -135,10 +135,6 @@ if(RECAPTCHA_SITE_KEY){
   document.head.appendChild(rcS);
 }
 
-// Kept for compatibility with the existing widget; Stripe Checkout itself
-// is created server-side and redirected via data.url.
-var STRIPE_PK="pk_live_51TTqRK05yZTOTSGOqszWPCzx3TWZEXY0QJvp2twVeL1ukk40WhlNIa9HnSd6w7BZt31uPDazzx3ySM25SwD0xW3P00VT1Sgk5E";
-  
 var now=new Date(),todayC=new Date(now.getFullYear(),now.getMonth(),now.getDate());
 var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false,agreed:false};
 window.S=S;
@@ -165,7 +161,6 @@ function df(a,b){return Math.round((b-a)/864e5)}
 function inR(d,s,e){return d>=pd(s)&&d<=pd(e)}
 function gH(d){for(var i=0;i<HIGH_SEASON.length;i++)if(inR(d,HIGH_SEASON[i].start,HIGH_SEASON[i].end))return HIGH_SEASON[i];return null}
 function gM(d){if(gH(d))return null;for(var i=0;i<MID_SEASON.length;i++)if(inR(d,MID_SEASON[i].start,MID_SEASON[i].end))return MID_SEASON[i];return null}
-function midWindow(){if(!MID_SEASON.length)return"";var s=MID_SEASON[0].start,e=MID_SEASON[0].end,i;for(i=1;i<MID_SEASON.length;i++){if(MID_SEASON[i].start<s)s=MID_SEASON[i].start;if(MID_SEASON[i].end>e)e=MID_SEASON[i].end}var M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];function f(x){var p=String(x).split("-");return M[Number(p[1])-1]+" "+Number(p[2])}return f(s)+" – "+f(e)}
 function iB(d){for(var i=0;i<BOOKED.length;i++)if(inR(d,BOOKED[i].start,BOOKED[i].end))return true;return false}
 function hB(s,e){var d=new Date(s);while(d<=e){if(iB(d))return true;d=aD(d,1)}return false}
 function gS(ci,co){var d=new Date(ci),h=0,m=0,l=0;while(d<co){gH(d)?h++:(gM(d)?m++:l++);d=aD(d,1)}return h>=m&&h>=l?"high":(m>=l?"mid":"low")}
@@ -455,26 +450,13 @@ window.pay=function(){
     });
   });
 };
-window.resetAll=function(){
-  S.ci=null;S.co=null;S.sel="in";S.guests=1;S.step=0;
-  S.name="";S.email="";S.phone="";S.notes="";S.err="";
-  S.tr={};S.sending=false;R();
-};
-
 function loadBookingData(){
-  Promise.all([
-    fetch(API_URL+"?action=config").then(function(r){
-      if(!r.ok)throw new Error("Config request failed");
-      return r.json();
-    }),
-    fetch(API_URL+"?action=blocked_dates").then(function(r){
-      if(!r.ok)throw new Error("Blocked dates request failed");
-      return r.json();
-    })
-  ])
-  .then(function(results){
-    var cfg=results[0];
-    var dates=results[1];
+  fetch(API_URL+"?action=bootstrap").then(function(r){
+    if(!r.ok)throw new Error("Config request failed");
+    return r.json();
+  })
+  .then(function(cfg){
+    var dates=cfg.blocked;
 
     if(!cfg||cfg.success!==true){
       throw new Error((cfg&&cfg.message)||"Invalid config response");

@@ -451,7 +451,7 @@ window.pay=function(){
           ?"Rates changed while this page was open. Please refresh the page before continuing."
           :(data&&data.code==="RECAPTCHA_FAILED")
           ?"We could not verify this request. Please refresh the page and try again."
-          :"Payment setup failed. "+(data.message||"Please try again.");
+          :(data&&data.message)||"We couldn't start the payment. Please try again or email info@casapapelillo.com.";
         S.sending=false;R();
       }
     })

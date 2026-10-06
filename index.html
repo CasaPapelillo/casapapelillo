@@ -119,6 +119,7 @@ var MAX_PETS=0;
 var PET_RATE=0;
 
 var IS_DEV=new URLSearchParams(window.location.search).get("env")==="dev";
+var LANG=new URLSearchParams(window.location.search).get("lang")==="es"?"es":"en";
 var API_URL=IS_DEV
   ? "https://script.google.com/macros/s/AKfycbyDNOQ_0Xfe6Gbliy4TiSJk7-V6xFrPqhfMWEaeIiGZqa6ElCLe-6Pbcscmli3DbffK/exec"
   : "https://script.google.com/macros/s/AKfycbzZ0xnhLaCKd3gsRSOPjFSPMAQF3IlWgNCo3BP5SXLdHCbMYPtJk_zZRWzPL9JC5Xk/exec";
@@ -415,6 +416,7 @@ window.pay=function(){
 
   var payload={
     action:"create_checkout",
+    lang:LANG,
     checkIn:fd(S.ci),
     checkOut:fd(S.co),
     guests:String(S.guests),

@@ -37,8 +37,8 @@ h1 span{color:#E8863A;font-style:italic}
 .hdot{width:4px;height:4px;border-radius:50%;background:#E8863A;margin:2px auto 0;opacity:.5}
 .mdot{width:4px;height:4px;border-radius:50%;background:#C08A5E;margin:2px auto 0;opacity:.45}
 .cfoot{margin-top:14px}
-.sb{font-size:9px;font-weight:700;letter-spacing:2px;color:#E8863A;text-transform:uppercase}.sb.md{color:#C08A5E}.sb.lo{color:#999}
-.sl2{font-size:11px;color:#aaa}
+.sb{font-size:13px;font-weight:700;letter-spacing:2px;color:#E8863A;text-transform:uppercase}.sb.md{color:#C08A5E}.sb.lo{color:#999}
+.sl2{font-size:16px;line-height:1.5;color:#5a4f48}
 .pb{background:#fafaf8;border:1px solid #eee;border-radius:6px;padding:16px;margin-bottom:16px}
 .pr{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
 .pk{font-size:13px;color:#888}.pv{font-size:14px;font-weight:500}
@@ -241,10 +241,10 @@ function R(){
       +(MID_SEASON.length?'<div style="text-align:center;margin-top:6px"><span class="sb md">MID SEASON — '+MIN_M+' NIGHT'+(MIN_M===1?'':'S')+' MINIMUM</span><br><span class="sl2">All days btw Nov-1st and Apr-30th outside High Season</span></div>':"")
       +'<div style="text-align:center;margin-top:6px"><span class="sb lo">LOW SEASON — '+MIN_L+' NIGHT'+(MIN_L===1?'':'S')+' MINIMUM</span><br><span class="sl2">All other dates</span></div>'
       +'<div style="text-align:center;margin-top:8px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance</span></div>'
-      +'<div style="text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid #eee"><span style="font-size:10px;font-weight:700;letter-spacing:2px;color:#1a1a2e;text-transform:uppercase">Cancellation Policy</span><br>'
-      +'<span style="font-size:11px;color:#aaa">High Season — Full refund if cancelled &gt;60 days before arrival</span><br>'
-      +'<span style="font-size:11px;color:#aaa">Mid &amp; Low Season — Full refund if cancelled &gt;30 days before arrival</span><br>'
-      +'<span style="font-size:11px;color:#aaa;margin-top:4px;display:inline-block">No refund within cancellation window</span></div></div></div>'
+      +'<div style="text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid #eee"><span style="font-size:13px;font-weight:700;letter-spacing:2px;color:#1a1a2e;text-transform:uppercase">Cancellation Policy</span><br>'
+      +'<span style="font-size:16px;color:#1a1a2e;font-weight:700;margin-top:8px;display:inline-block">Low &amp; Mid Season</span><br><span style="font-size:16px;line-height:1.5;color:#5a4f48">100% refund: 30 or more days before arrival<br>50% refund: 29 to 14 days before arrival<br>No refund: within 14 days of arrival</span><br>'
+      +'<span style="font-size:16px;color:#1a1a2e;font-weight:700;margin-top:8px;display:inline-block">High Season</span><br><span style="font-size:16px;line-height:1.5;color:#5a4f48">100% refund: 60 or more days before arrival<br>50% refund: 59 to 30 days before arrival<br>No refund: within 30 days of arrival</span><br>'
+      +'<span style="font-size:16px;line-height:1.5;color:#5a4f48;margin-top:8px;display:inline-block">A stay that includes at least one High Season night follows the High Season policy. <a href="'+AGREEMENT_URL+'" target="_blank" rel="noopener" style="color:#7f1d1d">Full terms</a></span></div></div></div>'
       +pH+(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':"")
       +'<div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';
     for(var g=1;g<=12;g++)html+='<option value="'+g+'"'+(S.guests===g?' selected':'')+'>'+g+'</option>';

@@ -521,7 +521,46 @@ function loadBookingData(){
 
 loadBookingData();
 
-if(typeof ResizeObserver!=="undefined"){try{new ResizeObserver(function(){window.parent.postMessage({type:"resize",height:document.body.scrollHeight},"*")}).observe(document.body)}catch(e){}}
+/* Frame height (R20). When the widget sits in an iframe, tell the host page its real
+   content height after every change ("cp-widget:height"), and say when the step
+   changes ("cp-widget:step") so the host can bring the top of the widget into view.
+   The host page's listener (Elementor Custom Code, R20) does the resizing; without
+   one nothing changes and the frame behaves exactly as before. The old "resize"
+   message is still sent for any listener written against it. */
+(function(){
+  if(window.parent===window)return;
+  var lastH=0,lastStep=S.step,queued=false;
+  function measure(){
+    var a=document.getElementById("app");
+    return a?Math.ceil(a.getBoundingClientRect().bottom+(window.pageYOffset||0)):0;
+  }
+  function send(){
+    queued=false;
+    var h=measure();
+    if(h>0&&Math.abs(h-lastH)>1){
+      lastH=h;
+      try{
+        window.parent.postMessage({type:"cp-widget:height",height:h,step:S.step},"*");
+        window.parent.postMessage({type:"resize",height:h},"*");
+      }catch(e){}
+    }
+    if(S.step!==lastStep){
+      lastStep=S.step;
+      try{window.parent.postMessage({type:"cp-widget:step",step:S.step},"*")}catch(e){}
+    }
+  }
+  function queue(){if(!queued){queued=true;(window.requestAnimationFrame||setTimeout)(send)}}
+  var app=document.getElementById("app");
+  if(typeof ResizeObserver!=="undefined"&&app){try{new ResizeObserver(queue).observe(app)}catch(e){}}
+  if(typeof MutationObserver!=="undefined"&&app){try{new MutationObserver(queue).observe(app,{childList:true,subtree:true})}catch(e){}}
+  window.addEventListener("load",queue);
+  window.addEventListener("resize",queue);
+  if(document.fonts&&document.fonts.ready){document.fonts.ready.then(queue)}
+  window.addEventListener("message",function(e){
+    if(e.source===window.parent&&e.data&&e.data.type==="cp-host:ping"){lastH=0;queue()}
+  });
+  queue();
+})();
 
 });
 </script>

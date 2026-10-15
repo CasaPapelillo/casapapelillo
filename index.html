@@ -23,22 +23,22 @@ h1 span{color:#E8863A;font-style:italic}
 .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .cal-arr{background:#fff;border:1px solid #ddd;color:#888;width:34px;height:34px;border-radius:4px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center}
 .cal-arr:hover{border-color:#E8863A;color:#E8863A}
-.cal-month{font-size:14px;font-weight:600;letter-spacing:1.5px;color:#E8863A;text-transform:uppercase}
-.legend{display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap}
-.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:#888}
-.legd{width:8px;height:8px;border-radius:50%;display:inline-block}
+.cal-month{font-size:15px;font-weight:600;letter-spacing:1.5px;color:#E8863A;text-transform:uppercase}
+.legend{display:flex;gap:8px 18px;margin-bottom:12px;flex-wrap:wrap}
+.leg{display:flex;align-items:center;gap:7px;font-size:15px;color:#5a4f48}
+.legd{width:14px;height:14px;border-radius:3px;display:inline-block;border:1px solid #efe6da;background:#fcfbf8}
+.legd.high{background:#fde9d8;border-color:#f2c39c}.legd.mid{background:#f6efe7;border-color:#e8d9c8}.legd.bk{background:#fde8e8;border-color:#f5cccc}
 .cg{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-.cdh{text-align:center;font-size:10px;font-weight:700;color:#aaa;padding:4px 0;letter-spacing:1px}
-.cd{text-align:center;padding:10px 4px;border-radius:4px;font-size:13px;position:relative;cursor:pointer;border:1px solid transparent;user-select:none}
+.cdh{text-align:center;font-size:15px;font-weight:600;color:#8a8079;padding:4px 0}
+.cd{text-align:center;padding:7px 2px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:4px;font-size:15px;line-height:1.2;position:relative;cursor:pointer;border:1px solid transparent;user-select:none}
 .cd.past{opacity:.25;cursor:default}.cd.booked{background:#fde8e8;color:#c25050;cursor:default}
-.cd.high{background:#fdf8f3;border-color:#f0dcc8}.cd.mid{background:#fdfbf7;border-color:#efe4d6}.cd.sel{background:#fef0e5;color:#E8863A;font-weight:600;border-color:#E8863A}
+.cd.high{background:#fde9d8;border-color:#f2c39c}.cd.mid{background:#f6efe7;border-color:#e8d9c8}.cd.low{background:#fcfbf8;border-color:#efe6da}.cd.sel{background:#fef0e5;color:#E8863A;font-weight:600;border-color:#E8863A}
 .cd.ep{background:#E8863A;color:#fff;font-weight:700;border-color:#E8863A}
 .cd:not(.past):not(.booked):hover{background:#fef0e5}
-.hdot{width:4px;height:4px;border-radius:50%;background:#E8863A;margin:2px auto 0;opacity:.5}
-.mdot{width:4px;height:4px;border-radius:50%;background:#C08A5E;margin:2px auto 0;opacity:.45}
+.cp{display:block;font-size:13px;font-weight:600;margin-top:3px;color:#6f6455}.cd.high .cp{color:#b4591a}.cd.mid .cp{color:#8a6340}.cp .s{display:none}
 .cfoot{margin-top:14px}
-.sb{font-size:13px;font-weight:700;letter-spacing:2px;color:#E8863A;text-transform:uppercase}.sb.md{color:#C08A5E}.sb.lo{color:#999}
-.sl2{font-size:16px;line-height:1.5;color:#5a4f48}
+.sb{font-size:14px;font-weight:700;letter-spacing:2px;color:#d9550f;text-transform:uppercase}.sb.md{color:#a0714a}.sb.lo{color:#9a8567}
+.sl2{font-size:16px;line-height:1.5;color:#5a4f48}.sl2 b{color:#2a2320;font-weight:700}.nw{white-space:nowrap}
 .pb{background:#fafaf8;border:1px solid #eee;border-radius:6px;padding:16px;margin-bottom:16px}
 .pr{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
 .pk{font-size:13px;color:#888}.pv{font-size:14px;font-weight:500}
@@ -91,7 +91,7 @@ textarea{min-height:80px;resize:vertical}
 .agree input{width:16px;height:16px;margin-top:2px;flex:0 0 auto;accent-color:#E8863A;cursor:pointer}
 .agree a{color:#E8863A}
 .agree .req{color:#c25050;font-weight:700}
-@media(max-width:480px){.wrap{padding:24px 16px}.steps{gap:10px}.stxt{font-size:11px}}
+@media(max-width:480px){.wrap{padding:24px 16px}.steps{gap:10px}.stxt{font-size:11px}.cal-box{padding:14px 10px}.cd{min-height:50px;padding:6px 1px}.cp .f{display:none}.cp .s{display:inline}.sb{letter-spacing:1px}}
 </style>
 </head>
 <body>
@@ -159,6 +159,55 @@ function highSeasonLabels(){
   HIGH_SEASON.forEach(function(s){var label=String(s.label||"").trim();if(label&&!seen[label]){seen[label]=true;labels.push(label)}});
   return labels.length?labels.join(" · "):"Configured high-season dates";
 }
+/* R21 (Oct 2026): season display on the dates step. Every figure is computed from
+   the same HIGH_SEASON / MID_SEASON / RATE_* data that tints the cells and prices
+   the stay, so the text, the tints and the totals cannot disagree, and the dates
+   roll over by themselves when the backend sends the next season. */
+var MS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var NB=" ";
+function tierRate(t){return t==="high"?RATE_H:(t==="mid"?RATE_M:RATE_L)}
+function priceTag(t){var r=tierRate(t);return'<span class="cp"><span class="f">'+f$(r)+'</span><span class="s">$'+(Math.round(r/100)/10)+'k</span></span>'}
+function seasonYear(iso){var d=pd(iso);return d.getMonth()>=10?d.getFullYear():d.getFullYear()-1}
+function pickSeason(){
+  // Nov-Dec: the season starting that November. Jan-Apr: the one that started the
+  // previous November. May-Oct: the next one. If the backend has not sent that
+  // season yet, show the nearest one it has, with years, so no date is ambiguous.
+  var want=S.vM>=10?S.vY:(S.vM<=3?S.vY-1:S.vY),have={};
+  HIGH_SEASON.concat(MID_SEASON).forEach(function(s){have[seasonYear(s.start)]=true});
+  var ys=Object.keys(have).map(Number);if(!ys.length)return null;
+  if(have[want])return{y:want,exact:true};
+  ys.sort(function(a,b){return Math.abs(a-want)-Math.abs(b-want)||b-a});
+  return{y:ys[0],exact:false};
+}
+function mdy(d){return MS[d.getMonth()]+NB+d.getDate()}
+function fmtRange(s,e,withYear){
+  var t=(s.getMonth()===e.getMonth()&&s.getFullYear()===e.getFullYear())
+    ?mdy(s)+"–"+e.getDate()
+    :mdy(s)+NB+"–"+NB+mdy(e);
+  return withYear?t+","+NB+e.getFullYear():t;
+}
+function eventName(label){
+  var l=String(label||"").toLowerCase();
+  if(/ondalinda/.test(l))return"Ondalinda";
+  if(/christmas|navidad/.test(l))return"Christmas & New Year";
+  if(/chinese|chino/.test(l))return"Chinese New Year";
+  if(/easter|holy|santa/.test(l))return"Easter";
+  return String(label||"").trim();
+}
+function seasonText(){
+  var p=pickSeason();if(!p)return null;
+  var inY=function(s){return seasonYear(s.start)===p.y};
+  var hs=HIGH_SEASON.filter(inY).sort(function(a,b){return pd(a.start)-pd(b.start)});
+  var ms=MID_SEASON.filter(inY),all=hs.concat(ms);
+  var st=null,en=null;
+  all.forEach(function(s){var a=pd(s.start),b=pd(s.end);if(!st||a<st)st=a;if(!en||b>en)en=b});
+  var out={high:hs.map(function(s){return eH(eventName(s.label))+" (<b class=\"nw\">"+fmtRange(pd(s.start),pd(s.end),!p.exact)+"</b>)"}).join(" · ")};
+  if(ms.length){
+    out.mid="Every other day from <b class=\"nw\">"+mdy(st)+" to "+mdy(en)+(p.exact?"":","+NB+en.getFullYear())+"</b>";
+    out.low="<b class=\"nw\">"+mdy(aD(en,1))+NB+"–"+NB+mdy(aD(st,-1))+"</b>";
+  }
+  return out;
+}
 function sm(a,b){return a&&b&&fd(a)===fd(b)}
 function df(a,b){return Math.round((b-a)/864e5)}
 function inR(d,s,e){return d>=pd(s)&&d<=pd(e)}
@@ -200,7 +249,7 @@ function R(){
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){
-    var days=cDays(S.vY,S.vM);var hi=S.ci?gH(S.ci):null;
+    var days=cDays(S.vY,S.vM);var hi=S.ci?gH(S.ci):null;var stx=seasonText();
     var dH=DY.map(function(d){return'<div class="cdh">'+d+'</div>'}).join("");
     days.forEach(function(date){
       if(!date){dH+='<div class="cd past"></div>';return}
@@ -211,8 +260,8 @@ function R(){
       var inSl=S.ci&&(S.co?(date>=S.ci&&date<=S.co):sm(date,S.ci));
       var isCi=sm(date,S.ci),isCo=sm(date,S.co);
       var cls="cd";
-      if(unavailable)cls+=" past";else if(bk)cls+=" booked";else if(isCi||isCo)cls+=" ep";else if(inSl)cls+=" sel";else if(high)cls+=" high";else if(mid)cls+=" mid";
-      var free=!bk&&!unavailable&&!inSl&&!isCi&&!isCo;var dot=high&&free?'<div class="hdot"></div>':(mid&&free?'<div class="mdot"></div>':"");
+      if(unavailable)cls+=" past";else if(bk)cls+=" booked";else if(isCi||isCo)cls+=" ep";else if(inSl)cls+=" sel";else if(high)cls+=" high";else if(mid)cls+=" mid";else cls+=" low";
+      var free=!bk&&!unavailable&&!inSl&&!isCi&&!isCo;var dot=free?priceTag(high?"high":(mid?"mid":"low")):"";
       var oc=!unavailable&&!bk?' onclick="hDay('+date.getTime()+')"':"";
       dH+='<div class="'+cls+'"'+oc+'>'+date.getDate()+dot+'</div>';
     });
@@ -236,13 +285,13 @@ function R(){
       pH+='</div>';
     }
     html+='<div class="cal-box"><div class="cal-nav"><button class="cal-arr" onclick="pM()">‹</button><span class="cal-month">'+MO[S.vM]+' '+S.vY+'</span><button class="cal-arr" onclick="nM()">›</button></div>'
-      +'<div class="legend"><span class="leg"><span class="legd" style="background:#4a8c3f"></span>Available</span><span class="leg"><span class="legd" style="background:#c25050"></span>Booked</span><span class="leg"><span class="legd" style="background:#E8863A"></span>High Season</span>'+(MID_SEASON.length?'<span class="leg"><span class="legd" style="background:#C08A5E"></span>Mid Season</span>':"")+'</div>'
+      +'<div class="legend"><span class="leg"><span class="legd high"></span>High '+f$(RATE_H)+'</span>'+(MID_SEASON.length?'<span class="leg"><span class="legd mid"></span>Mid '+f$(RATE_M)+'</span>':"")+'<span class="leg"><span class="legd"></span>Low '+f$(RATE_L)+'</span><span class="leg"><span class="legd bk"></span>Booked</span></div>'
       +'<div class="cg">'+dH+'</div>'
-      +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON — '+MIN_H+' NIGHT'+(MIN_H===1?'':'S')+' MINIMUM</span><br><span class="sl2">'+eH(highSeasonLabels())+'</span></div>'
-      +(MID_SEASON.length?'<div style="text-align:center;margin-top:6px"><span class="sb md">MID SEASON — '+MIN_M+' NIGHT'+(MIN_M===1?'':'S')+' MINIMUM</span><br><span class="sl2">All days btw Nov-1st and Apr-30th outside High Season</span></div>':"")
-      +'<div style="text-align:center;margin-top:6px"><span class="sb lo">LOW SEASON — '+MIN_L+' NIGHT'+(MIN_L===1?'':'S')+' MINIMUM</span><br><span class="sl2">All other dates</span></div>'
-      +'<div style="text-align:center;margin-top:8px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance</span></div>'
-      +'<div style="text-align:center;margin-top:8px"><span class="sl2">See our cancellation policy <a href="https://casapapelillo.com/terms-conditions/" target="_blank" rel="noopener" style="color:#7f1d1d">here</a>.</span></div></div></div>'
+      +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON · '+f$(RATE_H)+' / NIGHT · <span class="nw">'+MIN_H+'-NIGHT MINIMUM</span></span><br><span class="sl2">'+(stx?stx.high:eH(highSeasonLabels()))+'</span></div>'
+      +(MID_SEASON.length?'<div style="text-align:center;margin-top:10px"><span class="sb md">MID SEASON · '+f$(RATE_M)+' / NIGHT · <span class="nw">'+MIN_M+'-NIGHT MINIMUM</span></span><br><span class="sl2">'+(stx&&stx.mid?stx.mid:"All days between Nov 1 and Apr 30 outside High Season")+'</span></div>':"")
+      +'<div style="text-align:center;margin-top:10px"><span class="sb lo">LOW SEASON · '+f$(RATE_L)+' / NIGHT · <span class="nw">'+MIN_L+'-NIGHT MINIMUM</span></span><br><span class="sl2">'+(stx&&stx.low?stx.low:"All other dates")+'</span></div>'
+      +'<div style="text-align:center;margin-top:14px"><span class="sl2">Whole villa, up to 12 guests · 5% service fee included · subject to applicable tax</span></div>'
+      +'<div style="text-align:center;margin-top:6px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance · <a href="https://casapapelillo.com/terms-conditions/" target="_blank" rel="noopener" class="nw" style="color:#7f1d1d">Cancellation policy</a></span></div></div></div>'
       +pH+(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':"")
       +'<div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';
     for(var g=1;g<=12;g++)html+='<option value="'+g+'"'+(S.guests===g?' selected':'')+'>'+g+'</option>';

@@ -290,7 +290,7 @@ function R(){
       +'<div class="cfoot"><div style="text-align:center"><span class="sb">HIGH SEASON · '+f$(RATE_H)+' / NIGHT · <span class="nw">'+MIN_H+'-NIGHT MINIMUM</span></span><br><span class="sl2">'+(stx?stx.high:eH(highSeasonLabels()))+'</span></div>'
       +(MID_SEASON.length?'<div style="text-align:center;margin-top:10px"><span class="sb md">MID SEASON · '+f$(RATE_M)+' / NIGHT · <span class="nw">'+MIN_M+'-NIGHT MINIMUM</span></span><br><span class="sl2">'+(stx&&stx.mid?stx.mid:"All days between Nov 1 and Apr 30 outside High Season")+'</span></div>':"")
       +'<div style="text-align:center;margin-top:10px"><span class="sb lo">LOW SEASON · '+f$(RATE_L)+' / NIGHT · <span class="nw">'+MIN_L+'-NIGHT MINIMUM</span></span><br><span class="sl2">'+(stx&&stx.low?stx.low:"All other dates")+'</span></div>'
-      +'<div style="text-align:center;margin-top:14px"><span class="sl2">Whole villa, up to 12 guests · 5% service fee included · subject to applicable tax</span></div>'
+      +'<div style="text-align:center;margin-top:14px"><span class="sl2">USD per night, whole villa. 5% service fee included.</span></div>'
       +'<div style="text-align:center;margin-top:6px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance · <a href="https://casapapelillo.com/terms-conditions/" target="_blank" rel="noopener" class="nw" style="color:#7f1d1d">Cancellation policy</a></span></div></div></div>'
       +pH+(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':"")
       +'<div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';

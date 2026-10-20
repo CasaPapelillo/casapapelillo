@@ -12,7 +12,7 @@ body{background:#fff;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Seg
 h1{font-size:30px;font-weight:300;font-family:'DM Serif Display',Georgia,serif;color:#1a1a2e;letter-spacing:-0.01em}
 h1 span{color:#E8863A;font-style:italic}
 .sub{font-size:14px;color:#666;margin-top:8px;line-height:1.55}
-.note{font-size:16px;line-height:1.5;color:#5a4f48;margin-top:6px}.note a{color:inherit;text-decoration:none}
+.note{font-size:16px;line-height:1.5;color:#5a4f48;margin-top:6px}.note a,a.qa{color:inherit;text-decoration:none}
 .steps{display:flex;gap:20px;margin:24px 0 20px;padding-bottom:16px;border-bottom:1px solid #eee}
 .step{display:flex;align-items:center;gap:8px;transition:opacity .3s}
 .step.dim{opacity:.35}
@@ -167,8 +167,9 @@ var MS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 var NB=" ";
 function minStayLine(){
   var nt=function(k){return k+NB+"night"+(k===1?"":"s")};
-  var hi='<b class="t-hi">High</b>: '+nt(MIN_H),md='<b class="t-md">Mid</b>',lo='<b class="t-lo">Low</b>';
-  var rest=!MID_SEASON.length?lo+": "+nt(MIN_L):(MIN_M===MIN_L?md+"/"+lo+": "+nt(MIN_L):md+": "+nt(MIN_M)+"; "+lo+": "+nt(MIN_L));
+  var ln=function(t){return '<a class="qa" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener">'+t+'</a>'};
+  var hi=ln('<b class="t-hi">High</b>: '+nt(MIN_H)),md='<b class="t-md">Mid</b>',lo='<b class="t-lo">Low</b>';
+  var rest=!MID_SEASON.length?ln(lo+": "+nt(MIN_L)):(MIN_M===MIN_L?ln(md+"/"+lo+": "+nt(MIN_L)):ln(md+": "+nt(MIN_M))+"; "+ln(lo+": "+nt(MIN_L)));
   return "Seasonal minimum stays: "+hi+"; "+rest+".";
 }
 function tierRate(t){return t==="high"?RATE_H:(t==="mid"?RATE_M:RATE_L)}
@@ -293,7 +294,7 @@ function R(){
     html+='<div class="cal-box"><div class="cal-nav"><button class="cal-arr" onclick="pM()">‹</button><span class="cal-month">'+MO[S.vM]+' '+S.vY+'</span><button class="cal-arr" onclick="nM()">›</button></div>'
       +'<div class="legend"><a class="leg" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener"><span class="legd high"></span><span class="lt t-hi">High '+f$(RATE_H)+'</span></a>'+(MID_SEASON.length?'<a class="leg" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener"><span class="legd mid"></span><span class="lt t-md">Mid '+f$(RATE_M)+'</span></a>':"")+'<a class="leg" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener"><span class="legd"></span><span class="lt t-lo">Low '+f$(RATE_L)+'</span></a><span class="leg"><span class="legd bk"></span>Booked</span></div>'
       +'<div class="cg">'+dH+'</div>'
-      +'<div class="cfoot"><div style="text-align:center"><span class="sl2">USD per night, whole villa. 5% service fee included.</span></div>'
+      +'<div class="cfoot"><div style="text-align:center"><span class="sl2">USD per night, whole villa. <a class="qa" href="https://casapapelillo.com/about/#whats-included" target="_blank" rel="noopener">5% service fee included</a>.</span></div>'
       +'<div style="text-align:center;margin-top:6px"><span class="sl2">'+minStayLine()+'</span></div>'
       +'<div style="text-align:center;margin-top:6px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance · <a href="https://casapapelillo.com/terms-conditions/" target="_blank" rel="noopener" class="nw" style="color:#7f1d1d">Cancellation policy</a></span></div></div></div>'
       +pH+(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':"")

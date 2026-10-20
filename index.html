@@ -97,6 +97,24 @@ textarea{min-height:80px;resize:vertical}
 <body>
 <div class="wrap" id="app"><p style="color:#888;text-align:center;padding:40px 0">Loading rates & availability…</p></div>
 <script>
+/* Self-refresh (WSIMP20f). Browsers may keep this page for up to 10 min (GitHub
+   Pages cache), so after a change some visitors would see the old widget. On load
+   we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
+   ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
+   has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
+var WIDGET_BUILD="2026-10-20f";
+(function(){
+  var touched=false,mark=function(){touched=true};
+  document.addEventListener("pointerdown",mark,true);document.addEventListener("keydown",mark,true);
+  try{
+    var u=new URL(window.location.href);
+    fetch(u.pathname+"?_bc="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.text():""}).then(function(t){
+      var m=t.match(/var WIDGET_BUILD="([^"]+)"/);
+      if(touched||!m||m[1]===WIDGET_BUILD||u.searchParams.get("b")===m[1])return;
+      u.searchParams.set("b",m[1]);window.location.replace(u.toString());
+    }).catch(function(){});
+  }catch(e){}
+})();
 document.addEventListener("DOMContentLoaded",function(){
 
 /* ═══ DATA ═══ */

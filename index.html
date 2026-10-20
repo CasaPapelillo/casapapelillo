@@ -8,7 +8,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#fff;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1a1a2e;-webkit-font-smoothing:antialiased}
-.wrap{max-width:560px;margin:0 auto;padding:36px 24px}
+.wrap{max-width:560px;margin:0 auto;padding:36px 24px 100px}.grecaptcha-badge{left:4px!important;right:auto!important;width:70px!important;overflow:hidden!important;transition:width .3s ease!important}.grecaptcha-badge:hover{width:256px!important}
 h1{font-size:30px;font-weight:300;font-family:'DM Serif Display',Georgia,serif;color:#1a1a2e;letter-spacing:-0.01em}
 h1 span{color:#E8863A;font-style:italic}
 .sub{font-size:14px;color:#666;margin-top:8px;line-height:1.55}
@@ -91,7 +91,7 @@ textarea{min-height:80px;resize:vertical}
 .agree input{width:16px;height:16px;margin-top:2px;flex:0 0 auto;accent-color:#E8863A;cursor:pointer}
 .agree a{color:#E8863A}
 .agree .req{color:#c25050;font-weight:700}
-@media(max-width:480px){.wrap{padding:24px 16px}.steps{gap:10px}.stxt{font-size:11px}.cal-box{padding:14px 10px}.cd{min-height:50px;padding:6px 1px}.cp .f{display:none}.cp .s{display:inline}.sb{letter-spacing:1px}}
+@media(max-width:480px){.wrap{padding:24px 16px 96px}.steps{gap:10px}.stxt{font-size:11px}.cal-box{padding:14px 10px}.cd{min-height:50px;padding:6px 1px}.cp .f{display:none}.cp .s{display:inline}.sb{letter-spacing:1px}}
 </style>
 </head>
 <body>
@@ -251,7 +251,7 @@ function R(){
     return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+t+'</span></div>'
   }).join("");
 
-  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? Please <a href="https://wa.me/13152620362" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:info@casapapelillo.com">email</a> us at <a href="https://wa.me/13152620362" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a> | <a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a></p><div class="steps">'+stH+'</div>';
+  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? <a href="https://wa.me/13152620362" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:info@casapapelillo.com">email</a> us at <a href="https://wa.me/13152620362" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a> | <a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a></p><div class="steps">'+stH+'</div>';
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){

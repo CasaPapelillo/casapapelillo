@@ -10,7 +10,7 @@
 body{background:#fff;font-family:-apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1a1a2e;-webkit-font-smoothing:antialiased}
 .wrap{max-width:560px;margin:0 auto;padding:36px 24px 100px}.grecaptcha-badge{left:4px!important;right:auto!important;width:70px!important;overflow:hidden!important;transition:width .3s ease!important}.grecaptcha-badge:hover{width:256px!important}
 h1{font-size:30px;font-weight:300;font-family:'DM Serif Display',Georgia,serif;color:#1a1a2e;letter-spacing:-0.01em}
-h1 span{color:#E8863A;font-style:italic}
+h1 span{color:#E8863A;font-style:italic}.hd{display:flex;align-items:center;gap:12px}.logo{width:48px;height:48px;flex:0 0 auto;display:block}
 .sub{font-size:14px;color:#666;margin-top:8px;line-height:1.55}
 .note{font-size:16px;line-height:1.5;color:#5a4f48;margin-top:6px}.note a,a.qa{color:inherit;text-decoration:none}
 .steps{display:flex;gap:20px;margin:24px 0 20px;padding-bottom:16px;border-bottom:1px solid #eee}
@@ -91,7 +91,7 @@ textarea{min-height:80px;resize:vertical}
 .agree input{width:16px;height:16px;margin-top:2px;flex:0 0 auto;accent-color:#E8863A;cursor:pointer}
 .agree a{color:#E8863A}
 .agree .req{color:#c25050;font-weight:700}
-@media(max-width:480px){.wrap{padding:24px 16px 96px}.steps{gap:10px}.stxt{font-size:11px}.cal-box{padding:14px 10px}.cd{min-height:50px;padding:6px 1px}.cp .f{display:none}.cp .s{display:inline}.sb{letter-spacing:1px}}
+@media(max-width:480px){.logo{width:40px;height:40px}.hd{gap:10px}}@media(max-width:400px){h1{font-size:26px}}@media(max-width:480px){.wrap{padding:24px 16px 96px}.steps{gap:10px}.stxt{font-size:11px}.cal-box{padding:14px 10px}.cd{min-height:50px;padding:6px 1px}.cp .f{display:none}.cp .s{display:inline}.sb{letter-spacing:1px}}
 </style>
 </head>
 <body>
@@ -102,7 +102,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-10-20f";
+var WIDGET_BUILD="2026-10-20g";
 (function(){
   var touched=false,mark=function(){touched=true};
   document.addEventListener("pointerdown",mark,true);document.addEventListener("keydown",mark,true);
@@ -270,7 +270,7 @@ function R(){
     return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+t+'</span></div>'
   }).join("");
 
-  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<h1>Reserve <span>Casa Papelillo</span></h1><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? <a href="https://wa.me/13152620362" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:info@casapapelillo.com">email</a> us at <a href="https://wa.me/13152620362" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a> | <a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a></p><div class="steps">'+stH+'</div>';
+  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>Reserve <span>Casa Papelillo</span></h1></div><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? <a href="https://wa.me/13152620362" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:info@casapapelillo.com">email</a> us at <a href="https://wa.me/13152620362" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a> | <a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a></p><div class="steps">'+stH+'</div>';
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){

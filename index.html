@@ -45,7 +45,7 @@ h1 span{color:#E8863A;font-style:italic}.hd{display:flex;align-items:center;gap:
 .pv.t{color:#E8863A;font-size:18px;font-weight:700;font-family:'DM Serif Display',Georgia,serif}
 .stag{font-size:10px;color:#E8863A;font-weight:600;margin-top:4px;text-transform:uppercase;letter-spacing:1.5px}
 .hint{font-size:12px;color:#aaa;font-style:italic;margin-top:4px}
-.fld{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.fld{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}.gp{display:grid;grid-template-columns:1fr 1fr;gap:12px}.gp .fld{margin-bottom:4px;min-width:0}.gp-note{margin:0 0 8px}
 .lbl{font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase}
 input,select,textarea{background:#fafaf8;border:1px solid #ddd;border-radius:4px;padding:11px 14px;color:#1a1a2e;font-size:14px;outline:none;font-family:inherit;width:100%}
 input:focus,textarea:focus{border-color:#E8863A}
@@ -102,7 +102,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-10-20g";
+var WIDGET_BUILD="2026-10-21a";
 (function(){
   var touched=false,mark=function(){touched=true};
   document.addEventListener("pointerdown",mark,true);document.addEventListener("keydown",mark,true);
@@ -316,14 +316,14 @@ function R(){
       +'<div style="text-align:center;margin-top:6px"><span class="sl2">'+minStayLine()+'</span></div>'
       +'<div style="text-align:center;margin-top:6px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance · <a href="https://casapapelillo.com/terms-conditions/" target="_blank" rel="noopener" class="nw" style="color:#7f1d1d">Cancellation policy</a></span></div></div></div>'
       +pH+(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':"")
-      +'<div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';
+      +'<div class="gp"><div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';
     for(var g=1;g<=12;g++)html+='<option value="'+g+'"'+(S.guests===g?' selected':'')+'>'+g+'</option>';
     html+='</select></div>';
     if(MAX_PETS>0){
       html+='<div class="fld"><label class="lbl">Pets</label><select onchange="S.pets=Number(this.value);R()">';
       for(var p=0;p<=MAX_PETS;p++)html+='<option value="'+p+'"'+(S.pets===p?' selected':'')+'>'+p+'</option>';
-      html+='</select>'+(PET_RATE>0?'<span class="hint">Note: Pets are charged extra at '+f$(PET_RATE)+' per pet, per night</span>':'')+'</div>';
-    }
+      html+='</select></div></div>'+(PET_RATE>0?'<div class="hint gp-note">Note: Pets are charged extra at '+f$(PET_RATE)+' per pet, per night</div>':'');
+    }else{html+='</div>'}
   }
 
   /* ═══ STEP 1: TRANSPORTATION ═══ */
@@ -442,9 +442,26 @@ window.hDay=function(ts){
     var n=df(S.ci,date),se=gS(S.ci,date),min=se==="high"?MIN_H:(se==="mid"?MIN_M:MIN_L);
     if(n<min){S.err="Minimum stay is "+min+" night"+(min===1?"":"s")+" during "+se+" season.";R();return}
     S.co=date;S.sel="in";
+    R();revealContinue();return;
   }
   R();
 };
+
+/* Phone fix (MSWIPE21). After the check-out date is picked, bring the Continue
+   button into view so guests don't have to swipe for it. Touch screens only.
+   Waits for the host page to grow the frame, then (a) asks the host page to
+   scroll (message cp-widget:reveal, used once the site listens for it) and
+   (b) calls scrollIntoView, which most phone browsers pass up to the page. */
+function revealContinue(){
+  try{if(!(window.matchMedia&&window.matchMedia("(pointer:coarse)").matches))return}catch(e){return}
+  setTimeout(function(){
+    var b=document.querySelector(".nav .bp");
+    if(!b||S.step!==0||!(S.ci&&S.co))return;
+    var r=b.getBoundingClientRect(),y=window.pageYOffset||0;
+    try{if(window.parent!==window)window.parent.postMessage({type:"cp-widget:reveal",top:Math.round(r.top+y),bottom:Math.round(r.bottom+y)},"*")}catch(e){}
+    try{b.scrollIntoView({behavior:"smooth",block:"center"})}catch(e){try{b.scrollIntoView(false)}catch(e2){}}
+  },350);
+}
 
 window.tT=function(id){if(S.tr[id])delete S.tr[id];else S.tr[id]=1;R()};
 window.sQ=function(id,q){if(q<1)delete S.tr[id];else S.tr[id]=q;R()};

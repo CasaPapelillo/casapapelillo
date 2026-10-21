@@ -92,6 +92,7 @@ textarea{min-height:80px;resize:vertical}
 .agree a{color:#E8863A}
 .agree .req{color:#c25050;font-weight:700}
 @media(max-width:480px){.logo{width:40px;height:40px}.hd{gap:10px}}@media(max-width:400px){h1{font-size:26px}}@media(max-width:480px){.wrap{padding:24px 16px 96px}.steps{gap:10px}.stxt{font-size:11px}.cal-box{padding:14px 10px}.cd{min-height:50px;padding:6px 1px}.cp .f{display:none}.cp .s{display:inline}.sb{letter-spacing:1px}}
+@media (pointer:coarse){.wrap{padding-bottom:220px}}
 </style>
 </head>
 <body>
@@ -102,8 +103,9 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-10-21a";
+var WIDGET_BUILD="2026-10-21b";
 (function(){
+  if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
   document.addEventListener("pointerdown",mark,true);document.addEventListener("keydown",mark,true);
   try{
@@ -138,6 +140,7 @@ var PET_RATE=0;
 
 var IS_DEV=new URLSearchParams(window.location.search).get("env")==="dev";
 var LANG=new URLSearchParams(window.location.search).get("lang")==="es"?"es":"en";
+var PREFETCH=new URLSearchParams(window.location.search).get("prefetch")==="1";
 var API_URL=IS_DEV
   ? "https://script.google.com/macros/s/AKfycbyDNOQ_0Xfe6Gbliy4TiSJk7-V6xFrPqhfMWEaeIiGZqa6ElCLe-6Pbcscmli3DbffK/exec"
   : "https://script.google.com/macros/s/AKfycbzZ0xnhLaCKd3gsRSOPjFSPMAQF3IlWgNCo3BP5SXLdHCbMYPtJk_zZRWzPL9JC5Xk/exec";
@@ -149,7 +152,7 @@ var AGREEMENT_URL="https://docs.google.com/document/d/1S3w7yzGJyRtWsB7udHsWQWnfq
    SECRET key goes in the Apps Script properties as RECAPTCHA_SECRET. While this
    is empty the widget behaves exactly as before — nothing loads, nothing breaks. */
 var RECAPTCHA_SITE_KEY="6LfdmJgtAAAAAKbZt8wAW3KyVqwYqa5S0jxc3QzZ";
-if(RECAPTCHA_SITE_KEY){
+if(RECAPTCHA_SITE_KEY&&!PREFETCH){
   var rcS=document.createElement("script");
   rcS.src="https://www.google.com/recaptcha/api.js?render="+encodeURIComponent(RECAPTCHA_SITE_KEY);
   rcS.async=true;rcS.defer=true;
@@ -382,7 +385,7 @@ function R(){
   html+='<div class="nav">';
   if(S.step>0)html+='<button class="bs" onclick="goB()">← Back</button>';
   html+='<div class="spacer"></div>';
-  if(S.step===0){var can=S.ci&&S.co;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()"'+(can?"":" disabled") +'>Continue →</button>'}
+  if(S.step===0){var can=S.ci&&S.co&&!S.stale;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()"'+(can?"":" disabled") +'>'+(S.ci&&S.co&&S.stale?"Checking availability…":"Continue →")+'</button>'}
   if(S.step===1)html+='<button class="bp" onclick="goN()">Continue →</button>';
   if(S.step===2){var can2=contactReady();html+='<button id="payBtn" class="bp'+(can2&&!S.sending?"":" dim")+'" onclick="pay()"'+(can2&&!S.sending?"":" disabled")+'>'+(S.sending?"Processing...":"Pay "+f$(gTot())+" USD →")+'</button>'}
   html+='</div>';
@@ -467,6 +470,7 @@ window.tT=function(id){if(S.tr[id])delete S.tr[id];else S.tr[id]=1;R()};
 window.sQ=function(id,q){if(q<1)delete S.tr[id];else S.tr[id]=q;R()};
 window.goB=function(){S.step--;S.err="";R()};
 window.goN=function(){
+  if(S.step===0&&S.stale)return;
   if(S.step===0&&!(S.ci&&S.co)){S.err="Please select check-in and check-out dates.";R();return}
   S.step++;S.err="";R();
 };
@@ -548,59 +552,84 @@ window.pay=function(){
     });
   });
 };
-function loadBookingData(){
-  fetch(API_URL+"?action=bootstrap").then(function(r){
+/* Speed (MSWIPE21b). The Apps Script call takes 1.7-3 s. The last answer is kept
+   in this browser (24 h) so the calendar shows at once while the live answer loads;
+   Continue waits for the live answer. A hidden copy of this page opened with
+   ?prefetch=1 (by the website, after the page loads) only fetches and stores it.
+   Prices are never trusted from the browser: the backend reprices at checkout. */
+var BOOT_KEY="cp_boot_v1_"+(IS_DEV?"dev":"live"),BOOT_MAX_MS=24*3600*1000;
+function bootGet(){try{var o=JSON.parse(localStorage.getItem(BOOT_KEY)||"null");if(o&&o.cfg&&Date.now()-o.t<BOOT_MAX_MS)return o.cfg}catch(e){}return null}
+function bootPut(cfg){try{localStorage.setItem(BOOT_KEY,JSON.stringify({t:Date.now(),cfg:cfg}))}catch(e){}}
+function fetchBoot(){
+  return fetch(API_URL+"?action=bootstrap").then(function(r){
     if(!r.ok)throw new Error("Config request failed");
     return r.json();
-  })
-  .then(function(cfg){
-    var dates=cfg.blocked;
+  });
+}
+function applyCfg(cfg){
+  var dates=cfg.blocked;
 
-    if(!cfg||cfg.success!==true){
-      throw new Error((cfg&&cfg.message)||"Invalid config response");
-    }
+  if(!cfg||cfg.success!==true){
+    throw new Error((cfg&&cfg.message)||"Invalid config response");
+  }
 
-    if(cfg.stripeMode!==EXPECTED_STRIPE_MODE){
-      throw new Error(
-        "Safety check failed: expected Stripe "+EXPECTED_STRIPE_MODE+
-        " mode but backend reported "+String(cfg.stripeMode)+"."
-      );
-    }
+  if(cfg.stripeMode!==EXPECTED_STRIPE_MODE){
+    throw new Error(
+      "Safety check failed: expected Stripe "+EXPECTED_STRIPE_MODE+
+      " mode but backend reported "+String(cfg.stripeMode)+"."
+    );
+  }
 
-    RATE_L=Number(cfg.rates.low);
-    RATE_M=Number(cfg.rates.mid!=null?cfg.rates.mid:cfg.rates.low);
-    RATE_H=Number(cfg.rates.high);
-    MIN_L=Number(cfg.minimumNights.low);
-    MIN_M=Number(cfg.minimumNights.mid!=null?cfg.minimumNights.mid:cfg.minimumNights.low);
-    MIN_H=Number(cfg.minimumNights.high);
-    MIN_LEAD_DAYS=Number(cfg.minLeadDays);
-    MAX_LEAD_DAYS=Number(cfg.maxLeadDays);
-    MAX_PETS=Number(cfg.maxPets)||0;
-    PET_RATE=Number(cfg.petRate)||0;
+  RATE_L=Number(cfg.rates.low);
+  RATE_M=Number(cfg.rates.mid!=null?cfg.rates.mid:cfg.rates.low);
+  RATE_H=Number(cfg.rates.high);
+  MIN_L=Number(cfg.minimumNights.low);
+  MIN_M=Number(cfg.minimumNights.mid!=null?cfg.minimumNights.mid:cfg.minimumNights.low);
+  MIN_H=Number(cfg.minimumNights.high);
+  MIN_LEAD_DAYS=Number(cfg.minLeadDays);
+  MAX_LEAD_DAYS=Number(cfg.maxLeadDays);
+  MAX_PETS=Number(cfg.maxPets)||0;
+  PET_RATE=Number(cfg.petRate)||0;
 
-    if(!Number.isInteger(MIN_LEAD_DAYS)||MIN_LEAD_DAYS<0){
-      throw new Error("Invalid MIN_LEAD_DAYS from backend.");
-    }
-    if(!Number.isInteger(MAX_LEAD_DAYS)||MAX_LEAD_DAYS<MIN_LEAD_DAYS){
-      throw new Error("Invalid MAX_LEAD_DAYS from backend.");
-    }
+  if(!Number.isInteger(MIN_LEAD_DAYS)||MIN_LEAD_DAYS<0){
+    throw new Error("Invalid MIN_LEAD_DAYS from backend.");
+  }
+  if(!Number.isInteger(MAX_LEAD_DAYS)||MAX_LEAD_DAYS<MIN_LEAD_DAYS){
+    throw new Error("Invalid MAX_LEAD_DAYS from backend.");
+  }
 
-    HIGH_SEASON=Array.isArray(cfg.highSeasons)?cfg.highSeasons:[];
-    MID_SEASON=Array.isArray(cfg.midSeasons)?cfg.midSeasons:[];
+  HIGH_SEASON=Array.isArray(cfg.highSeasons)?cfg.highSeasons:[];
+  MID_SEASON=Array.isArray(cfg.midSeasons)?cfg.midSeasons:[];
 
-    TRANSPORT=(Array.isArray(cfg.transportation)?cfg.transportation:[]).map(function(i){
-      return {
-        id:i.id,
-        nm:i.name,
-        ds:i.desc,
-        pr:Number(i.price)
-      };
-    });
+  TRANSPORT=(Array.isArray(cfg.transportation)?cfg.transportation:[]).map(function(i){
+    return {
+      id:i.id,
+      nm:i.name,
+      ds:i.desc,
+      pr:Number(i.price)
+    };
+  });
 
-    BOOKED=Array.isArray(dates)?dates:[];
-    R();
+  BOOKED=Array.isArray(dates)?dates:[];
+}
+/* After live data arrives, drop a selection that is no longer valid. */
+function recheckSelection(){
+  if(!S.ci)return;
+  var bad=iB(S.ci)||S.ci<todayC;
+  if(!bad&&S.co){
+    var n=df(S.ci,S.co),se=gS(S.ci,S.co),min=se==="high"?MIN_H:(se==="mid"?MIN_M:MIN_L);
+    bad=hB(S.ci,S.co)||n<min;
+  }
+  if(bad){S.ci=null;S.co=null;S.sel="in";S.err="Availability just updated. Please choose your dates again."}
+}
+function loadBookingData(){
+  var cached=bootGet();
+  if(cached){try{applyCfg(cached);S.stale=true;R()}catch(e){cached=null;S.stale=false}}
+  fetchBoot().then(function(cfg){
+    applyCfg(cfg);bootPut(cfg);S.stale=false;recheckSelection();R();
   })
   .catch(function(err){
+    if(cached){S.err="We couldn't check live availability. Please try again in a moment, or contact us.";R();return}
     document.getElementById("app").innerHTML=
       '<div class="err">Booking system unavailable: '+
       eH(String(err.message||err))+
@@ -608,6 +637,10 @@ function loadBookingData(){
   });
 }
 
+if(PREFETCH){
+  fetchBoot().then(function(cfg){if(cfg&&cfg.success===true&&cfg.stripeMode===EXPECTED_STRIPE_MODE)bootPut(cfg)}).catch(function(){});
+  return;
+}
 loadBookingData();
 
 /* Frame height (R20). When the widget sits in an iframe, tell the host page its real

@@ -50,6 +50,8 @@ h1 span{color:#E8863A;font-style:italic}.hd{display:flex;align-items:center;gap:
 input,select,textarea{background:#fafaf8;border:1px solid #ddd;border-radius:4px;padding:11px 14px;color:#1a1a2e;font-size:14px;outline:none;font-family:inherit;width:100%}
 input:focus,textarea:focus{border-color:#E8863A}
 textarea{min-height:80px;resize:vertical}
+.calm{background:#faf6f0;border:1px solid #e6dccd;color:#2a2320;padding:12px 14px;border-radius:4px;font-size:16px;line-height:1.45;margin:14px 0 0}
+.help{font-size:16px;line-height:1.45;color:#5a4f48;margin-top:10px}.help a{color:inherit;text-decoration:underline}
 .err{background:#fde8e8;border:1px solid #f0c0c0;color:#c25050;padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:14px}
 .eh2{font-size:22px;font-weight:400;font-family:'DM Serif Display',Georgia,serif;margin:0 0 6px}
 .esub{font-size:13px;color:#888;line-height:1.55;margin-bottom:16px}
@@ -103,7 +105,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-10-21c";
+var WIDGET_BUILD="2026-11-03a";
 (function(){
   if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
@@ -160,7 +162,30 @@ if(RECAPTCHA_SITE_KEY&&!PREFETCH){
 }
 
 var now=new Date(),todayC=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,pets:0,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false,agreed:false};
+/* Quiet time limits (TOUT3, 3 Nov 2026). Availability only reads, so it stops at
+   12 s and retries once by itself, and the guest sees nothing new until 27 s.
+   Checkout is never retried automatically: a calm note at 15 s, then at 60 s the
+   widget stops waiting and offers Try again. A stopped checkout can leave an
+   unpaid Stripe session whose link nobody has; it expires at 31 min. No WhatsApp
+   link shows while a call runs, because leaving the page could interrupt it. */
+var BOOT_STOP_MS=12000,BOOT_RETRY_MS=15000,PREFETCH_STOP_MS=15000,PAY_NOTE_MS=15000,PAY_STOP_MS=60000;
+var WA_URL="https://casapapelillo.com/whatsapp";
+var MSG=LANG==="es"?{
+  cal:"En este momento no podemos cargar el calendario.",
+  live:"No pudimos confirmar la disponibilidad en este momento.",
+  slow:"Seguimos preparando su página de pago seguro. Por favor, mantenga esta página abierta. No se ha realizado ningún cargo.",
+  pay:"No pudimos abrir la página de pago. No se ha realizado ningún cargo.",
+  again:"Intentar de nuevo",
+  help:'¿Prefiere hablar con una persona? Escríbanos por <a href="'+WA_URL+'" target="_blank" rel="noopener">WhatsApp</a> o <a href="mailto:info@casapapelillo.com">correo</a> y le enviaremos un enlace de pago seguro.'
+}:{
+  cal:"We can't load our calendar right now.",
+  live:"We couldn't confirm live availability just now.",
+  slow:"Still preparing your secure payment page. Please keep this page open. You have not been charged.",
+  pay:"We couldn't open the payment page. You have not been charged.",
+  again:"Try again",
+  help:'Prefer a person? Reach us on <a href="'+WA_URL+'" target="_blank" rel="noopener">WhatsApp</a> or by <a href="mailto:info@casapapelillo.com">email</a> and we\'ll send you a secure payment link.'
+};
+var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,pets:0,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false,agreed:false,bootFail:false,paySlow:false,payFail:false};
 window.S=S;
 
 /* ═══ HELPERS ═══ */
@@ -382,13 +407,18 @@ function R(){
   }
 
   /* ═══ NAVIGATION ═══ */
+  if(S.bootFail&&S.step===0)html+='<div class="calm" role="status">'+MSG.live+'</div>';
+  if(S.paySlow&&S.sending&&S.step===2)html+='<div class="calm" role="status">'+MSG.slow+'</div>';
+  if(S.payFail&&S.step===2)html+='<div class="calm" role="status">'+MSG.pay+'</div>';
   html+='<div class="nav">';
   if(S.step>0)html+='<button class="bs" onclick="goB()">← Back</button>';
   html+='<div class="spacer"></div>';
-  if(S.step===0){var can=S.ci&&S.co&&!S.stale;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()"'+(can?"":" disabled") +'>'+(S.ci&&S.co&&S.stale?"Checking availability…":"Continue →")+'</button>'}
+  if(S.step===0&&S.bootFail){html+='<button class="bp" onclick="retryBoot()">'+MSG.again+'</button>'}
+  else if(S.step===0){var can=S.ci&&S.co&&!S.stale;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()"'+(can?"":" disabled") +'>'+(S.ci&&S.co&&S.stale?"Checking availability…":"Continue →")+'</button>'}
   if(S.step===1)html+='<button class="bp" onclick="goN()">Continue →</button>';
-  if(S.step===2){var can2=contactReady();html+='<button id="payBtn" class="bp'+(can2&&!S.sending?"":" dim")+'" onclick="pay()"'+(can2&&!S.sending?"":" disabled")+'>'+(S.sending?"Processing...":"Pay "+f$(gTot())+" USD →")+'</button>'}
+  if(S.step===2){var can2=contactReady();html+='<button id="payBtn" class="bp'+(can2&&!S.sending?"":" dim")+'" onclick="pay()"'+(can2&&!S.sending?"":" disabled")+'>'+(S.sending?"Processing...":S.payFail?MSG.again+" →":"Pay "+f$(gTot())+" USD →")+'</button>'}
   html+='</div>';
+  if((S.bootFail&&S.step===0)||(S.payFail&&S.step===2))html+='<p class="help">'+MSG.help+'</p>';
 
   app.innerHTML=html;
 }
@@ -468,7 +498,7 @@ function revealContinue(){
 
 window.tT=function(id){if(S.tr[id])delete S.tr[id];else S.tr[id]=1;R()};
 window.sQ=function(id,q){if(q<1)delete S.tr[id];else S.tr[id]=q;R()};
-window.goB=function(){S.step--;S.err="";R()};
+window.goB=function(){S.step--;S.err="";S.payFail=false;R()};
 window.goN=function(){
   if(S.step===0&&S.stale)return;
   if(S.step===0&&!(S.ci&&S.co)){S.err="Please select check-in and check-out dates.";R();return}
@@ -500,7 +530,7 @@ window.pay=function(){
     R();return
   }
   if(S.sending)return;
-  S.sending=true;S.err="";R();
+  S.sending=true;S.err="";S.payFail=false;S.paySlow=false;R();
 
   var transportData=[];
   TRANSPORT.forEach(function(i){
@@ -533,9 +563,17 @@ window.pay=function(){
   withRecaptcha(function(rcToken){
     payload.recaptchaToken=rcToken;
 
-    fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(payload)})
+    var ac=window.AbortController?new AbortController():null;
+    var tNote=setTimeout(function(){S.paySlow=true;R()},PAY_NOTE_MS);
+    var tStop=ac?setTimeout(function(){ac.abort()},PAY_STOP_MS):0;
+    var stopTimers=function(){clearTimeout(tNote);clearTimeout(tStop);S.paySlow=false};
+    var opts={method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(payload)};
+    if(ac)opts.signal=ac.signal;
+
+    fetch(API_URL,opts)
     .then(function(r){return r.json()})
     .then(function(data){
+      stopTimers();
       if(data.success&&data.url){
         /* GATRACK21: tell the website the guest is going to Stripe (it records
            "begin_checkout" in Google Analytics). casapapelillo.com only, no data.
@@ -553,7 +591,9 @@ window.pay=function(){
       }
     })
     .catch(function(e){
-      S.err="Connection error. Please try again.";S.sending=false;R();
+      stopTimers();
+      console.error("Checkout call failed: "+String(e&&e.message||e));
+      S.payFail=true;S.sending=false;R();
     });
   });
 };
@@ -565,12 +605,18 @@ window.pay=function(){
 var BOOT_KEY="cp_boot_v1_"+(IS_DEV?"dev":"live"),BOOT_MAX_MS=24*3600*1000;
 function bootGet(){try{var o=JSON.parse(localStorage.getItem(BOOT_KEY)||"null");if(o&&o.cfg&&Date.now()-o.t<BOOT_MAX_MS)return o.cfg}catch(e){}return null}
 function bootPut(cfg){try{localStorage.setItem(BOOT_KEY,JSON.stringify({t:Date.now(),cfg:cfg}))}catch(e){}}
-function fetchBoot(){
-  return fetch(API_URL+"?action=bootstrap").then(function(r){
+function fetchBootOnce(limitMs){
+  var c=window.AbortController?new AbortController():null;
+  var t=c?setTimeout(function(){c.abort()},limitMs):0;
+  return fetch(API_URL+"?action=bootstrap",c?{signal:c.signal}:{}).then(function(r){
     if(!r.ok)throw new Error("Config request failed");
     return r.json();
-  });
+  }).then(function(cfg){clearTimeout(t);return cfg},function(e){clearTimeout(t);throw e});
 }
+function fetchBoot(){
+  return fetchBootOnce(BOOT_STOP_MS).catch(function(){return fetchBootOnce(BOOT_RETRY_MS)});
+}
+window.retryBoot=function(){S.bootFail=false;S.stale=true;R();loadBookingData()};
 function applyCfg(cfg){
   var dates=cfg.blocked;
 
@@ -631,19 +677,21 @@ function loadBookingData(){
   var cached=bootGet();
   if(cached){try{applyCfg(cached);S.stale=true;R()}catch(e){cached=null;S.stale=false}}
   fetchBoot().then(function(cfg){
-    applyCfg(cfg);bootPut(cfg);S.stale=false;recheckSelection();R();
+    applyCfg(cfg);bootPut(cfg);S.stale=false;S.bootFail=false;recheckSelection();R();
   })
   .catch(function(err){
-    if(cached){S.err="We couldn't check live availability. Please try again in a moment, or contact us.";R();return}
+    console.error("Availability call failed: "+String(err&&err.message||err));
+    if(cached){S.bootFail=true;R();return}
     document.getElementById("app").innerHTML=
-      '<div class="err">Booking system unavailable: '+
-      eH(String(err.message||err))+
-      '</div>';
+      '<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>Reserve <span>Casa Papelillo</span></h1></div>'+
+      '<div class="calm" role="status">'+MSG.cal+'</div>'+
+      '<div class="nav"><div class="spacer"></div><button class="bp" onclick="window.location.reload()">'+MSG.again+'</button></div>'+
+      '<p class="help">'+MSG.help+'</p>';
   });
 }
 
 if(PREFETCH){
-  fetchBoot().then(function(cfg){if(cfg&&cfg.success===true&&cfg.stripeMode===EXPECTED_STRIPE_MODE)bootPut(cfg)}).catch(function(){});
+  fetchBootOnce(PREFETCH_STOP_MS).then(function(cfg){if(cfg&&cfg.success===true&&cfg.stripeMode===EXPECTED_STRIPE_MODE)bootPut(cfg)}).catch(function(){});
   return;
 }
 loadBookingData();

@@ -105,7 +105,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-11-03c";
+var WIDGET_BUILD="2026-11-03d";
 (function(){
   if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
@@ -133,8 +133,6 @@ var MIN_M=1;
 var MIN_L=1;
 var MIN_LEAD_DAYS=0;
 var MAX_LEAD_DAYS=365;
-var MO=["January","February","March","April","May","June","July","August","September","October","November","December"];
-var DY=["Mo","Tu","We","Th","Fr","Sa","Su"];
 
 var TRANSPORT=[];
 var MAX_PETS=0;
@@ -143,11 +141,15 @@ var PET_RATE=0;
 var IS_DEV=new URLSearchParams(window.location.search).get("env")==="dev";
 var LANG=new URLSearchParams(window.location.search).get("lang")==="es"?"es":"en";
 var PREFETCH=new URLSearchParams(window.location.search).get("prefetch")==="1";
+/* Spanish screens (SPAN3). The Spanish website opens this page with ?lang=es.
+   ES_LIVE is the one off switch: true shows Spanish on ?lang=es (Oliver, 3 Nov 2026);
+   false puts ?lang=es back on the English screens, with Spanish left on ?lang=es&esui=1. */
+var ES_LIVE=true;
+var ES_UI=LANG==="es"&&(ES_LIVE||new URLSearchParams(window.location.search).get("esui")==="1");
 var API_URL=IS_DEV
   ? "https://script.google.com/macros/s/AKfycbyDNOQ_0Xfe6Gbliy4TiSJk7-V6xFrPqhfMWEaeIiGZqa6ElCLe-6Pbcscmli3DbffK/exec"
   : "https://script.google.com/macros/s/AKfycbzZ0xnhLaCKd3gsRSOPjFSPMAQF3IlWgNCo3BP5SXLdHCbMYPtJk_zZRWzPL9JC5Xk/exec";
 var EXPECTED_STRIPE_MODE=IS_DEV?"test":"live";
-if(IS_DEV)document.title="TEST — Reserve Casa Papelillo";
 var AGREEMENT_URL="https://docs.google.com/document/d/1S3w7yzGJyRtWsB7udHsWQWnfqc7GrhOW3bqHtBrCFto/preview";
 
 /* reCAPTCHA v3. Paste the SITE key from google.com/recaptcha here; the matching
@@ -170,53 +172,225 @@ var now=new Date(),todayC=new Date(now.getFullYear(),now.getMonth(),now.getDate(
    link shows while a call runs, because leaving the page could interrupt it. */
 var BOOT_STOP_MS=12000,BOOT_RETRY_MS=15000,PREFETCH_STOP_MS=15000,PAY_NOTE_MS=15000,PAY_STOP_MS=60000;
 var WA_URL="https://casapapelillo.com/whatsapp";
-var MSG=LANG==="es"?{
-  cal:"En este momento no podemos cargar el calendario.",
-  live:"No pudimos confirmar la disponibilidad en este momento.",
-  slow:"Seguimos preparando su página de pago seguro. Por favor, mantenga esta página abierta. No se ha realizado ningún cargo.",
-  pay:"No pudimos abrir la página de pago. No se ha realizado ningún cargo.",
-  again:"Intentar de nuevo",
-  help:'¿Prefiere hablar con una persona? Escríbanos por <a href="'+WA_URL+'" target="_blank" rel="noopener">WhatsApp</a> o <a href="mailto:info@casapapelillo.com">correo</a> y le enviaremos un enlace de pago seguro.'
-}:{
-  cal:"We can't load our calendar right now.",
-  live:"We couldn't confirm live availability just now.",
-  slow:"Still preparing your secure payment page. Please keep this page open. You have not been charged.",
-  pay:"We couldn't open the payment page. You have not been charged.",
-  again:"Try again",
-  help:'Prefer a person? Reach us on <a href="'+WA_URL+'" target="_blank" rel="noopener">WhatsApp</a> or by <a href="mailto:info@casapapelillo.com">email</a> and we\'ll send you a secure payment link.'
+/* ═══ LANGUAGE (SPAN3). The ONE table of guest text: [English, Mexican Spanish].
+   Rules: usted, "reservación", "celular", es-MX dates, no tax wording. A blank
+   Spanish cell falls back to English, never to nothing; tools/check-i18n.js fails
+   the build on any blank cell. {0} {1} are filled in by t(). */
+var T={
+/* Page and header */
+doc_title:["Reserve Casa Papelillo","Reserve Casa Papelillo"],
+doc_test:["TEST — ","PRUEBA — "],
+loading:["Loading rates & availability…","Cargando tarifas y disponibilidad…"],
+h1:["Reserve","Reserve"],
+dev_mode:["TEST MODE","MODO DE PRUEBA"],
+dev_note:["Stripe Sandbox · No real charges","Stripe Sandbox · Sin cargos reales"],
+sub:["Select your dates, add transportation, and pay securely.","Elija sus fechas, agregue transporte y pague de forma segura."],
+note:["Questions? {0} or {1} us at {2} | {3}","¿Tiene preguntas? Escríbanos por {0} o {1} al {2} | {3}"],
+w_email:["email","correo"],
+/* Steps */
+st_dates:["Dates","Fechas"],
+st_transport:["Transportation","Transporte"],
+st_contact:["Contact","Contacto"],
+/* Calendar */
+cal_title:["{0} {1}","{0} de {1}"],
+s_high:["High","Alta"],
+s_mid:["Mid","Media"],
+s_low:["Low","Baja"],
+sl_high:["high","alta"],
+sl_mid:["mid","media"],
+sl_low:["low","baja"],
+ss_high:["High Season","Temporada alta"],
+ss_mid:["Mid Season","Temporada media"],
+ss_low:["Low Season","Temporada baja"],
+ss_mixed:["Mixed Season","Temporada mixta"],
+booked:["Booked","Reservado"],
+foot_rates:["USD per night, whole villa. {0}.","USD por noche, villa completa. {0}."],
+foot_fee:["5% service fee included","Incluye 5% de cargo por servicio"],
+foot_min:["Seasonal minimum stays:","Estancia mínima por temporada:"],
+foot_lead:["Bookings accepted {0}–{1} days in advance","Reservaciones con {0}–{1} días de anticipación"],
+foot_cancel:["Cancellation policy","Política de cancelación"],
+night:["night","noche"],
+nights:["nights","noches"],
+day:["day","día"],
+days:["days","días"],
+guest:["guest","huésped"],
+guests:["guests","huéspedes"],
+/* Price box */
+checkin:["Check-in","Check-in"],
+checkout:["Check-out","Check-out"],
+total_nights:["{0} {1} total","Total de {0} {1}"],
+hint_co:["Select check-out date","Elija la fecha de check-out"],
+lbl_guests:["Guests","Huéspedes"],
+lbl_pets:["Pets","Mascotas"],
+pet_note:["Note: Pets are charged extra at {0} per pet, per night","Nota: las mascotas tienen un cargo adicional de {0} por mascota, por noche"],
+/* Transportation */
+tr_title:["Transportation","Transporte"],
+tr_sub:["Add airport transfers to your booking. These will be charged with your reservation.","Agregue traslados al aeropuerto a su reservación. Se cobran junto con su reservación."],
+tr_head:["PRIVATE TRANSFERS","TRASLADOS PRIVADOS"],
+tr_subtotal:["Transportation subtotal","Subtotal de transporte"],
+tr_after:["Experiences (yoga, massages, boat tours, etc.) can be added after booking.","Las experiencias (yoga, masajes, paseos en lancha, etc.) se pueden agregar después de reservar."],
+"tr_sedan_zlo_nm":["Manzanillo Airport — Sedan","Aeropuerto de Manzanillo — Sedán"],
+"tr_sedan_zlo_ds":["Private sedan, up to 4 guests","Sedán privado, hasta 4 huéspedes"],
+"tr_suburban_zlo_nm":["Manzanillo Airport — Suburban","Aeropuerto de Manzanillo — Suburban"],
+"tr_suburban_zlo_ds":["Private Suburban, up to 7 guests","Suburban privada, hasta 7 huéspedes"],
+"tr_sedan_pvr_nm":["Puerto Vallarta Airport — Sedan","Aeropuerto de Puerto Vallarta — Sedán"],
+"tr_sedan_pvr_ds":["Private sedan, up to 4 guests","Sedán privado, hasta 4 huéspedes"],
+"tr_suburban_pvr_nm":["Puerto Vallarta Airport — Suburban","Aeropuerto de Puerto Vallarta — Suburban"],
+"tr_suburban_pvr_ds":["Private Suburban, up to 7 guests","Suburban privada, hasta 7 huéspedes"],
+/* High season names, matched from the backend label */
+hs_ondalinda:["Ondalinda Festival","Festival Ondalinda"],
+hs_xmas:["Christmas & New Year's","Navidad y Año Nuevo"],
+hs_cny:["Chinese New Year","Año Nuevo Chino"],
+hs_easter:["Holy & Easter Week","Semana Santa y Pascua"],
+hs_all:["Configured high-season dates","Fechas de temporada alta"],
+mid_every:["Every other day from {0} to {1}","Todos los demás días del {0} al {1}"],
+/* Contact and payment */
+ct_title:["Contact & Payment","Contacto y pago"],
+ct_sub:["Review your booking and proceed to secure payment.","Revise su reservación y continúe al pago seguro."],
+ct_name:["Full name *","Nombre completo *"],
+ct_name_ph:["Name","Nombre"],
+ct_email:["Email address *","Correo electrónico *"],
+ct_email_ph:["Email","Correo electrónico"],
+ct_phone:["Phone / WhatsApp *","Celular / WhatsApp *"],
+ct_phone_ph:["Telephone","Celular"],
+ct_notes:["Special requests or notes","Solicitudes especiales o notas"],
+ct_notes_ph:["Dietary needs, celebrations, special requests...","Necesidades alimentarias, celebraciones, solicitudes especiales..."],
+sm_head:["BOOKING SUMMARY","RESUMEN DE SU RESERVACIÓN"],
+sm_accom:["Accommodation ({0})","Hospedaje ({0})"],
+sm_mixed:["{0} {1} {2} × {3}","{0} {1} ({2}) × {3}"],
+sm_pets:["Pets ×{0} × {1} {2}","Mascotas ×{0} × {1} {2}"],
+sm_total:["Total to Pay","Total a pagar"],
+agree:["I have read and accept the {0}, including the assumption of risk and release of liability.","He leído y acepto el {0}, incluida la asunción de riesgos y la liberación de responsabilidad."],
+agree_link:["Vacation Rental &amp; Liability Waiver Agreement","Contrato de Arrendamiento Vacacional y Exención de Responsabilidad"],
+stripe:["Secure payment powered by Stripe","Pago seguro con tecnología de Stripe"],
+/* Buttons */
+b_back:["← Back","← Regresar"],
+b_next:["Continue →","Continuar →"],
+b_checking:["Checking availability…","Verificando disponibilidad…"],
+b_processing:["Processing...","Procesando..."],
+b_pay:["Pay {0} USD →","Pagar {0} USD →"],
+/* Messages on screen */
+e_lead_exact:["Check-in must be exactly {0} {1} from today.","La fecha de check-in debe ser exactamente dentro de {0} {1}."],
+e_lead_range:["Check-in must be between {0} and {1}.","La fecha de check-in debe estar entre el {0} y el {1}."],
+e_overlap:["Selected dates overlap with an existing reservation.","Las fechas elegidas se empalman con una reservación existente."],
+e_min:["Minimum stay is {0} {1} during {2} season.","La estancia mínima es de {0} {1} en temporada {2}."],
+e_dates:["Please select check-in and check-out dates.","Por favor, elija las fechas de check-in y check-out."],
+e_fill:["Please fill in all required fields.","Por favor, complete todos los campos obligatorios."],
+e_email:["Please enter a valid email address.","Por favor, escriba un correo electrónico válido."],
+e_tick:["Please tick the box to accept the Rental & Liability Waiver Agreement.","Por favor, marque la casilla para aceptar el Contrato de Arrendamiento Vacacional y Exención de Responsabilidad."],
+e_rates:["Rates changed while this page was open. Please refresh the page before continuing.","Las tarifas cambiaron mientras esta página estaba abierta. Por favor, actualice la página antes de continuar."],
+e_verify:["We could not verify this request. Please refresh the page and try again.","No pudimos verificar esta solicitud. Por favor, actualice la página e intente de nuevo."],
+e_start:["We couldn't start the payment. Please try again or email info@casapapelillo.com.","No pudimos iniciar el pago. Por favor, intente de nuevo o escriba a info@casapapelillo.com."],
+e_avail:["Availability just updated. Please choose your dates again.","La disponibilidad acaba de actualizarse. Por favor, elija sus fechas de nuevo."],
+/* Approved TOUT3 lines (MSG). These follow ?lang=es on their own, as they do today. */
+msg_cal:["We can't load our calendar right now.","En este momento no podemos cargar el calendario."],
+msg_live:["We couldn't confirm live availability just now.","No pudimos confirmar la disponibilidad en este momento."],
+msg_slow:["Still preparing your secure payment page. Please keep this page open. You have not been charged.","Seguimos preparando su página de pago seguro. Por favor, mantenga esta página abierta. No se ha realizado ningún cargo."],
+msg_pay:["We couldn't open the payment page. You have not been charged.","No pudimos abrir la página de pago. No se ha realizado ningún cargo."],
+msg_again:["Try again","Intentar de nuevo"],
+msg_help:['Prefer a person? Reach us on <a href="{0}" target="_blank" rel="noopener">WhatsApp</a> or by <a href="mailto:info@casapapelillo.com">email</a> and we\'ll send you a secure payment link.','¿Prefiere hablar con una persona? Escríbanos por <a href="{0}" target="_blank" rel="noopener">WhatsApp</a> o <a href="mailto:info@casapapelillo.com">correo</a> y le enviaremos un enlace de pago seguro.'],
+/* Links. Each Spanish URL checked live on 3 Nov 2026. */
+u_rates:["https://casapapelillo.com/#rates","https://casapapelillo.com/es/#rates"],
+u_incl:["https://casapapelillo.com/about/#whats-included","https://casapapelillo.com/es/acerca-de/#que-incluye"],
+u_terms:["https://casapapelillo.com/terms-conditions/","https://casapapelillo.com/es/terminos-y-condiciones/#cancellation"],
+/* Calendar names */
+MO:[["January","February","March","April","May","June","July","August","September","October","November","December"],["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]],
+DY:[["Mo","Tu","We","Th","Fr","Sa","Su"],["Lu","Ma","Mi","Ju","Vi","Sá","Do"]],
+MS:[["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]]
 };
+/* English sentences the backend can send back to the browser, matched exactly, with
+   their Spanish. An unknown sentence shows in English, never blank. Once the backend
+   answers in Spanish (SPAN3 step 6) these rows simply stop matching. */
+var BE=[
+[/^Invalid check-in or check-out date\.$/,"La fecha de check-in o de check-out no es válida."],
+[/^Check-out must be after check-in\.$/,"La fecha de check-out debe ser posterior a la de check-in."],
+[/^Name, email, and phone are required\.$/,"Se requieren nombre, correo electrónico y celular."],
+[/^Please accept the Rental & Liability Waiver Agreement to continue\.$/,"Por favor, acepte el Contrato de Arrendamiento Vacacional y Exención de Responsabilidad para continuar."],
+[/^We couldn't complete this booking online\. Please email info@casapapelillo\.com or WhatsApp \+1 \(315\) 262-0362 with your dates and we'll finish it for you\.$/,"No pudimos completar esta reservación en línea. Por favor, escríbanos a info@casapapelillo.com o por WhatsApp al +1 (315) 262-0362 con sus fechas y nosotros la terminaremos por usted."],
+[/^We could not verify this request\. Please refresh the page and try again\.$/,"No pudimos verificar esta solicitud. Por favor, actualice la página e intente de nuevo."],
+[/^Guests must be between 1 and 12\.$/,"El número de huéspedes debe ser de 1 a 12."],
+[/^Up to 1 pet can be included in a booking\.$/,"Se puede incluir hasta 1 mascota en una reservación."],
+[/^Up to (\d+) pets can be included in a booking\.$/,"Se pueden incluir hasta $1 mascotas en una reservación."],
+[/^We are not able to accept pets for this stay\.$/,"No podemos aceptar mascotas en esta estancia."],
+[/^Bookings require at least 1 day advance notice\.$/,"Las reservaciones requieren al menos 1 día de anticipación."],
+[/^Bookings require at least (\d+) days advance notice\.$/,"Las reservaciones requieren al menos $1 días de anticipación."],
+[/^Bookings can only be made up to (\d+) days in advance\.$/,"Solo se puede reservar con hasta $1 días de anticipación."],
+[/^Those dates overlap with an existing reservation\. Please choose different dates\.$/,"Esas fechas se empalman con una reservación existente. Por favor, elija otras fechas."],
+[/^Rates have changed\. Please refresh the booking page and try again\.$/,"Las tarifas cambiaron. Por favor, actualice la página de reservación e intente de nuevo."],
+[/^Reservation must include at least one night\.$/,"La reservación debe incluir al menos una noche."],
+[/^Minimum stay is 1 night during high season\.$/,"La estancia mínima es de 1 noche en temporada alta."],
+[/^Minimum stay is 1 night during mid season\.$/,"La estancia mínima es de 1 noche en temporada media."],
+[/^Minimum stay is 1 night during low season\.$/,"La estancia mínima es de 1 noche en temporada baja."],
+[/^Minimum stay is (\d+) nights during high season\.$/,"La estancia mínima es de $1 noches en temporada alta."],
+[/^Minimum stay is (\d+) nights during mid season\.$/,"La estancia mínima es de $1 noches en temporada media."],
+[/^Minimum stay is (\d+) nights during low season\.$/,"La estancia mínima es de $1 noches en temporada baja."],
+[/^Unknown transportation option: (.*)$/,"Opción de transporte desconocida: $1"],
+[/^Invalid transportation quantity for (.*)$/,"Cantidad de transporte no válida para $1"],
+[/^We couldn't start the payment\. Please try again or email info@casapapelillo\.com\.$/,"No pudimos iniciar el pago. Por favor, intente de nuevo o escriba a info@casapapelillo.com."],
+[/^Unknown action\.$/,"No se pudo procesar la solicitud."],
+[/^Request could not be processed\.$/,"No se pudo procesar la solicitud."]
+];
+var L=ES_UI?1:0;
+function t(k){
+  var r=T[k],s=r?(r[L]||r[0]):k;
+  for(var i=1;i<arguments.length;i++)s=s.split("{"+(i-1)+"}").join(arguments[i]);
+  return s;
+}
+function beMsg(m){
+  if(!ES_UI||!m)return m;
+  for(var i=0;i<BE.length;i++)if(BE[i][0].test(m))return m.replace(BE[i][0],BE[i][1]);
+  return m;
+}
+/* Word for a count. Where English always wrote "nights", always=true keeps it. */
+function nW(n,always){return t(n===1&&(ES_UI||!always)?"night":"nights")}
+function dW(n){return t(n===1?"day":"days")}
+function hsKey(label){
+  var l=String(label||"").toLowerCase();
+  return /ondalinda/.test(l)?"hs_ondalinda":/christmas|navidad/.test(l)?"hs_xmas":/chinese|chino/.test(l)?"hs_cny":/easter|holy|santa/.test(l)?"hs_easter":"";
+}
+function hsLabel(label){var k=hsKey(label);return ES_UI&&k?t(k):label}
+function trText(id,f,v){var r=T["tr_"+id+"_"+f];return ES_UI&&r&&r[1]?r[1]:v}
+var MO=T.MO[L],DY=T.DY[L],MS=T.MS[L];
+if(ES_UI){
+  document.documentElement.lang="es-MX";
+  document.title=t("doc_title");
+  var lgEl=document.querySelector("#app p");if(lgEl)lgEl.textContent=t("loading");
+}
+if(IS_DEV)document.title=t("doc_test")+t("doc_title");
+/* TOUT3 lines keep following ?lang=es by themselves, as before. */
+var ML=LANG==="es"?1:0;
+var MSG={cal:T.msg_cal[ML],live:T.msg_live[ML],slow:T.msg_slow[ML],pay:T.msg_pay[ML],again:T.msg_again[ML],help:T.msg_help[ML].split("{0}").join(WA_URL)};
 var S={vY:now.getFullYear(),vM:now.getMonth(),ci:null,co:null,sel:"in",guests:1,pets:0,step:0,name:"",email:"",phone:"",notes:"",err:"",tr:{},sending:false,agreed:false,bootFail:false,paySlow:false,payFail:false};
 window.S=S;
 
 /* ═══ HELPERS ═══ */
 function pd(s){var p=s.split("-");return new Date(+p[0],+p[1]-1,+p[2])}
 function fd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
-function fD(d){return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+function fD(d){return ES_UI?d.getDate()+" "+MS[d.getMonth()]+" "+d.getFullYear():d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
 function aD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r}
 function minCheckInDate(){return aD(todayC,MIN_LEAD_DAYS)}
 function maxCheckInDate(){return aD(todayC,MAX_LEAD_DAYS)}
 function checkInWithinLeadWindow(d){return d>=minCheckInDate()&&d<=maxCheckInDate()}
 function leadWindowMessage(){
-  if(MIN_LEAD_DAYS===MAX_LEAD_DAYS)return"Check-in must be exactly "+MIN_LEAD_DAYS+" day"+(MIN_LEAD_DAYS===1?"":"s")+" from today.";
-  return"Check-in must be between "+fD(minCheckInDate())+" and "+fD(maxCheckInDate())+".";
+  if(MIN_LEAD_DAYS===MAX_LEAD_DAYS)return t("e_lead_exact",MIN_LEAD_DAYS,dW(MIN_LEAD_DAYS));
+  return t("e_lead_range",fD(minCheckInDate()),fD(maxCheckInDate()));
 }
 function highSeasonLabels(){
   var seen={},labels=[];
   HIGH_SEASON.forEach(function(s){var label=String(s.label||"").trim();if(label&&!seen[label]){seen[label]=true;labels.push(label)}});
-  return labels.length?labels.join(" · "):"Configured high-season dates";
+  return labels.length?labels.join(" · "):t("hs_all");
 }
 /* R21 (Oct 2026): season display on the dates step. Every figure is computed from
    the same HIGH_SEASON / MID_SEASON / RATE_* data that tints the cells and prices
    the stay, so the text, the tints and the totals cannot disagree, and the dates
    roll over by themselves when the backend sends the next season. */
-var MS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 var NB=" ";
 function minStayLine(){
-  var nt=function(k){return k+NB+"night"+(k===1?"":"s")};
-  var ln=function(t){return '<a class="qa nw" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener">'+t+'</a>'};
-  var hi=ln('<b class="t-hi">High</b>: '+nt(MIN_H)),md='<b class="t-md">Mid</b>',lo='<b class="t-lo">Low</b>';
+  var nt=function(k){return k+NB+nW(k)};
+  var ln=function(x){return '<a class="qa nw" href="'+t("u_rates")+'" target="_blank" rel="noopener">'+x+'</a>'};
+  var hi=ln('<b class="t-hi">'+t("s_high")+'</b>: '+nt(MIN_H)),md='<b class="t-md">'+t("s_mid")+'</b>',lo='<b class="t-lo">'+t("s_low")+'</b>';
   var rest=!MID_SEASON.length?ln(lo+": "+nt(MIN_L)):(MIN_M===MIN_L?ln(md+"/"+lo+": "+nt(MIN_L)):ln(md+": "+nt(MIN_M))+" · "+ln(lo+": "+nt(MIN_L)));
-  return "Seasonal minimum stays:<br>"+hi+" · "+rest;
+  return t("foot_min")+"<br>"+hi+" · "+rest;
 }
 function tierRate(t){return t==="high"?RATE_H:(t==="mid"?RATE_M:RATE_L)}
 function priceTag(t){var r=tierRate(t);return'<span class="cp"><span class="f">'+f$(r)+'</span><span class="s">$'+(Math.round(r/100)/10)+'k</span></span>'}
@@ -240,6 +414,7 @@ function fmtRange(s,e,withYear){
   return withYear?t+","+NB+e.getFullYear():t;
 }
 function eventName(label){
+  if(ES_UI&&hsKey(label))return hsLabel(label);
   var l=String(label||"").toLowerCase();
   if(/ondalinda/.test(l))return"Ondalinda";
   if(/christmas|navidad/.test(l))return"Christmas & New Year";
@@ -256,7 +431,7 @@ function seasonText(){
   all.forEach(function(s){var a=pd(s.start),b=pd(s.end);if(!st||a<st)st=a;if(!en||b>en)en=b});
   var out={high:hs.map(function(s){return eH(eventName(s.label))+" (<b class=\"nw\">"+fmtRange(pd(s.start),pd(s.end),!p.exact)+"</b>)"}).join(" · ")};
   if(ms.length){
-    out.mid="Every other day from <b class=\"nw\">"+mdy(st)+" to "+mdy(en)+(p.exact?"":","+NB+en.getFullYear())+"</b>";
+    out.mid=t("mid_every",'<b class="nw">'+mdy(st),mdy(en)+(p.exact?"":","+NB+en.getFullYear())+"</b>");
     out.low="<b class=\"nw\">"+mdy(aD(en,1))+NB+"–"+NB+mdy(aD(st,-1))+"</b>";
   }
   return out;
@@ -270,7 +445,7 @@ function iB(d){for(var i=0;i<BOOKED.length;i++)if(inR(d,BOOKED[i].start,BOOKED[i
 function hB(s,e){var d=new Date(s);while(d<=e){if(iB(d))return true;d=aD(d,1)}return false}
 function gS(ci,co){var d=new Date(ci),h=0,m=0,l=0;while(d<co){gH(d)?h++:(gM(d)?m++:l++);d=aD(d,1)}return h>=m&&h>=l?"high":(m>=l?"mid":"low")}
 function cDays(y,m){var f=new Date(y,m,1),last=new Date(y,m+1,0).getDate();var dow=f.getDay();if(dow===0)dow=7;var days=[];for(var i=1;i<dow;i++)days.push(null);for(var d=1;d<=last;d++)days.push(new Date(y,m,d));return days}
-function f$(n){return"$"+n.toLocaleString()}
+function f$(n){return"$"+n.toLocaleString(ES_UI?"es-MX":undefined)}
 function eH(v){
   return String(v===undefined||v===null?"":v)
     .replace(/&/g,"&amp;")
@@ -293,12 +468,12 @@ function R(){
   var html="";
 
   // Steps
-  var stepNames=["Dates","Transportation","Contact"];
-  var stH=stepNames.map(function(t,i){
-    return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+t+'</span></div>'
+  var stepNames=[t("st_dates"),t("st_transport"),t("st_contact")];
+  var stH=stepNames.map(function(nm,i){
+    return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+nm+'</span></div>'
   }).join("");
 
-  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>Reserve <span>Casa Papelillo</span></h1></div><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? <a href="'+WA_URL+'" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:info@casapapelillo.com">email</a> us at <a href="'+WA_URL+'" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a> | <a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a></p><div class="steps">'+stH+'</div>';
+  html=(IS_DEV?'<div class="dev-banner"><strong>'+t("dev_mode")+'</strong><span>'+t("dev_note")+'</span></div>':'')+'<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>'+t("h1")+' <span>Casa Papelillo</span></h1></div><p class="sub">'+t("sub")+'</p><p class="note">'+t("note",'<a href="'+WA_URL+'" target="_blank" rel="noopener">WhatsApp</a>','<a href="mailto:info@casapapelillo.com">'+t("w_email")+'</a>','<a href="'+WA_URL+'" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a>','<a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a>')+'</p><div class="steps">'+stH+'</div>';
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){
@@ -320,44 +495,44 @@ function R(){
     });
     var pH="";
     if(S.ci){
-      pH='<div class="pb"><div class="pr"><span class="pk">Check-in</span><span class="pv">'+fD(S.ci)+'</span></div>';
+      pH='<div class="pb"><div class="pr"><span class="pk">'+t("checkin")+'</span><span class="pv">'+fD(S.ci)+'</span></div>';
       if(S.co){
         var b=getNB(),segs=[],bkH="";
-        if(b.high>0)segs.push(["High",b.high,RATE_H,"#E8863A"]);
-        if(b.mid>0)segs.push(["Mid",b.mid,RATE_M,"#C08A5E"]);
-        if(b.low>0)segs.push(["Low",b.low,RATE_L,"#999"]);
+        if(b.high>0)segs.push(["high",b.high,RATE_H,"#E8863A"]);
+        if(b.mid>0)segs.push(["mid",b.mid,RATE_M,"#C08A5E"]);
+        if(b.low>0)segs.push(["low",b.low,RATE_L,"#999"]);
         if(segs.length>1){
-          bkH=segs.map(function(s){return '<div class="pr"><span class="pk">'+s[1]+' night'+(s[1]>1?"s":"")+" × "+f$(s[2])+' <span style="font-size:10px;color:'+s[3]+';letter-spacing:1px">'+s[0].toUpperCase()+'</span></span><span class="pv">'+f$(s[1]*s[2])+' USD</span></div>'}).join("");
+          bkH=segs.map(function(s){return '<div class="pr"><span class="pk">'+s[1]+' '+nW(s[1])+" × "+f$(s[2])+' <span style="font-size:10px;color:'+s[3]+';letter-spacing:1px">'+t("s_"+s[0]).toUpperCase()+'</span></span><span class="pv">'+f$(s[1]*s[2])+' USD</span></div>'}).join("");
         }else{
-          bkH='<div class="pr"><span class="pk">'+nts()+' nights × '+f$(segs.length?segs[0][2]:RATE_L)+'</span><span class="pv">'+f$(rTot())+' USD</span></div>';
+          bkH='<div class="pr"><span class="pk">'+nts()+' '+nW(nts(),true)+' × '+f$(segs.length?segs[0][2]:RATE_L)+'</span><span class="pv">'+f$(rTot())+' USD</span></div>';
         }
-        pH+='<div class="pr"><span class="pk">Check-out</span><span class="pv">'+fD(S.co)+'</span></div>'+bkH
-          +'<div class="pr" style="border-top:1px solid #eee;margin-top:4px;padding-top:8px"><span class="pk">'+nts()+' nights total</span><span class="pv t">'+f$(rTot())+' USD</span></div>'
-          +'<div class="stag">'+(segs.length>1?"Mixed Season":(segs.length?segs[0][0]+" Season"+(segs[0][0]==="High"&&hi?" — "+hi.label:""):"Low Season"))+'</div>';
-      }else{pH+='<div class="hint">Select check-out date</div>'}
+        pH+='<div class="pr"><span class="pk">'+t("checkout")+'</span><span class="pv">'+fD(S.co)+'</span></div>'+bkH
+          +'<div class="pr" style="border-top:1px solid #eee;margin-top:4px;padding-top:8px"><span class="pk">'+t("total_nights",nts(),nW(nts(),true))+'</span><span class="pv t">'+f$(rTot())+' USD</span></div>'
+          +'<div class="stag">'+(segs.length>1?t("ss_mixed"):(segs.length?t("ss_"+segs[0][0])+(segs[0][0]==="high"&&hi?" — "+hsLabel(hi.label):""):t("ss_low")))+'</div>';
+      }else{pH+='<div class="hint">'+t("hint_co")+'</div>'}
       pH+='</div>';
     }
-    html+='<div class="cal-box"><div class="cal-nav"><button class="cal-arr" onclick="pM()">‹</button><span class="cal-month">'+MO[S.vM]+' '+S.vY+'</span><button class="cal-arr" onclick="nM()">›</button></div>'
-      +'<div class="legend"><a class="leg" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener"><span class="legd high"></span><span class="lt t-hi">High '+f$(RATE_H)+'</span></a>'+(MID_SEASON.length?'<a class="leg" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener"><span class="legd mid"></span><span class="lt t-md">Mid '+f$(RATE_M)+'</span></a>':"")+'<a class="leg" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener"><span class="legd"></span><span class="lt t-lo">Low '+f$(RATE_L)+'</span></a><span class="leg"><span class="legd bk"></span>Booked</span></div>'
+    html+='<div class="cal-box"><div class="cal-nav"><button class="cal-arr" onclick="pM()">‹</button><span class="cal-month">'+t("cal_title",MO[S.vM],S.vY)+'</span><button class="cal-arr" onclick="nM()">›</button></div>'
+      +'<div class="legend"><a class="leg" href="'+t("u_rates")+'" target="_blank" rel="noopener"><span class="legd high"></span><span class="lt t-hi">'+t("s_high")+' '+f$(RATE_H)+'</span></a>'+(MID_SEASON.length?'<a class="leg" href="'+t("u_rates")+'" target="_blank" rel="noopener"><span class="legd mid"></span><span class="lt t-md">'+t("s_mid")+' '+f$(RATE_M)+'</span></a>':"")+'<a class="leg" href="'+t("u_rates")+'" target="_blank" rel="noopener"><span class="legd"></span><span class="lt t-lo">'+t("s_low")+' '+f$(RATE_L)+'</span></a><span class="leg"><span class="legd bk"></span>'+t("booked")+'</span></div>'
       +'<div class="cg">'+dH+'</div>'
-      +'<div class="cfoot"><div style="text-align:center"><span class="sl2">USD per night, whole villa. <a class="qa" href="https://casapapelillo.com/about/#whats-included" target="_blank" rel="noopener">5% service fee included</a>.</span></div>'
+      +'<div class="cfoot"><div style="text-align:center"><span class="sl2">'+t("foot_rates",'<a class="qa" href="'+t("u_incl")+'" target="_blank" rel="noopener">'+t("foot_fee")+'</a>')+'</span></div>'
       +'<div style="text-align:center;margin-top:6px"><span class="sl2">'+minStayLine()+'</span></div>'
-      +'<div style="text-align:center;margin-top:6px"><span class="sl2">Bookings accepted '+MIN_LEAD_DAYS+'–'+MAX_LEAD_DAYS+' days in advance · <a href="https://casapapelillo.com/terms-conditions/" target="_blank" rel="noopener" class="nw" style="color:#7f1d1d">Cancellation policy</a></span></div></div></div>'
+      +'<div style="text-align:center;margin-top:6px"><span class="sl2">'+t("foot_lead",MIN_LEAD_DAYS,MAX_LEAD_DAYS)+' · <a href="'+t("u_terms")+'" target="_blank" rel="noopener" class="nw" style="color:#7f1d1d">'+t("foot_cancel")+'</a></span></div></div></div>'
       +pH+(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':"")
-      +'<div class="gp"><div class="fld"><label class="lbl">Guests</label><select onchange="S.guests=Number(this.value);R()">';
+      +'<div class="gp"><div class="fld"><label class="lbl">'+t("lbl_guests")+'</label><select onchange="S.guests=Number(this.value);R()">';
     for(var g=1;g<=12;g++)html+='<option value="'+g+'"'+(S.guests===g?' selected':'')+'>'+g+'</option>';
     html+='</select></div>';
     if(MAX_PETS>0){
-      html+='<div class="fld"><label class="lbl">Pets</label><select onchange="S.pets=Number(this.value);R()">';
+      html+='<div class="fld"><label class="lbl">'+t("lbl_pets")+'</label><select onchange="S.pets=Number(this.value);R()">';
       for(var p=0;p<=MAX_PETS;p++)html+='<option value="'+p+'"'+(S.pets===p?' selected':'')+'>'+p+'</option>';
-      html+='</select></div></div>'+(PET_RATE>0?'<div class="hint gp-note">Note: Pets are charged extra at '+f$(PET_RATE)+' per pet, per night</div>':'');
+      html+='</select></div></div>'+(PET_RATE>0?'<div class="hint gp-note">'+t("pet_note",f$(PET_RATE))+'</div>':'');
     }else{html+='</div>'}
   }
 
   /* ═══ STEP 1: TRANSPORTATION ═══ */
   if(S.step===1){
-    html+='<h2 class="eh2">Transportation</h2><p class="esub">Add airport transfers to your booking. These will be charged with your reservation.</p>';
-    html+='<div class="ect">PRIVATE TRANSFERS</div>';
+    html+='<h2 class="eh2">'+t("tr_title")+'</h2><p class="esub">'+t("tr_sub")+'</p>';
+    html+='<div class="ect">'+t("tr_head")+'</div>';
     TRANSPORT.forEach(function(item){
       var on=!!S.tr[item.id],q=S.tr[item.id]||1;
       var qH="";
@@ -372,38 +547,38 @@ function R(){
         +'<div class="ei"><div class="en">'+item.nm+'</div><div class="ed">'+item.ds+'</div></div>'
         +'<div class="ep2">'+f$(item.pr)+' USD</div></div>'+qH+'</div>';
     });
-    if(tTot()>0)html+='<div class="etb"><span style="font-size:13px;color:#888">Transportation subtotal</span><span style="font-size:16px;font-weight:700;color:#E8863A">'+f$(tTot())+' USD</span></div>';
-    html+='<p style="font-size:12px;color:#aaa;margin-top:8px;text-align:center">Experiences (yoga, massages, boat tours, etc.) can be added after booking.</p>';
+    if(tTot()>0)html+='<div class="etb"><span style="font-size:13px;color:#888">'+t("tr_subtotal")+'</span><span style="font-size:16px;font-weight:700;color:#E8863A">'+f$(tTot())+' USD</span></div>';
+    html+='<p style="font-size:12px;color:#aaa;margin-top:8px;text-align:center">'+t("tr_after")+'</p>';
   }
 
   /* ═══ STEP 2: CONTACT ═══ */
   if(S.step===2){
     var b=getNB(),segs=[];
-    if(b.high>0)segs.push(["High",b.high,RATE_H]);
-    if(b.mid>0)segs.push(["Mid",b.mid,RATE_M]);
-    if(b.low>0)segs.push(["Low",b.low,RATE_L]);
+    if(b.high>0)segs.push(["high",b.high,RATE_H]);
+    if(b.mid>0)segs.push(["mid",b.mid,RATE_M]);
+    if(b.low>0)segs.push(["low",b.low,RATE_L]);
     var acL="";
     if(segs.length>1){
-      acL=segs.map(function(s){return '<div class="sr"><span class="sk">'+s[1]+' night'+(s[1]>1?'s':'')+' '+s[0]+' × '+f$(s[2])+'</span><span class="sv">'+f$(s[1]*s[2])+'</span></div>'}).join("");
+      acL=segs.map(function(s){return '<div class="sr"><span class="sk">'+t("sm_mixed",s[1],nW(s[1]),t(ES_UI?"sl_"+s[0]:"s_"+s[0]),f$(s[2]))+'</span><span class="sv">'+f$(s[1]*s[2])+'</span></div>'}).join("");
     }else{
-      acL='<div class="sr"><span class="sk">Accommodation ('+(segs.length?segs[0][0]:"Low")+' Season)</span><span class="sv">'+f$(rTot())+'</span></div>';
+      acL='<div class="sr"><span class="sk">'+t("sm_accom",ES_UI?t("ss_"+(segs.length?segs[0][0]:"low")).toLowerCase():t("ss_"+(segs.length?segs[0][0]:"low")))+'</span><span class="sv">'+f$(rTot())+'</span></div>';
     }
-    var petL=petTot()>0?'<div class="sr"><span class="sk">Pets \u00d7'+S.pets+' \u00d7 '+nts()+' night'+(nts()>1?"s":"")+'</span><span class="sv">'+f$(petTot())+'</span></div>':'';
+    var petL=petTot()>0?'<div class="sr"><span class="sk">'+t("sm_pets",S.pets,nts(),nW(nts()))+'</span><span class="sv">'+f$(petTot())+'</span></div>':'';
     var trL="";
     TRANSPORT.forEach(function(i){if(S.tr[i.id]){var q=S.tr[i.id]||1;trL+='<div class="sr"><span class="sk">'+i.nm+(q>1?" ×"+q:"")+'</span><span class="sv">'+f$(i.pr*q)+'</span></div>'}});
 
-    html+='<h2 class="eh2">Contact & Payment</h2><p class="esub">Review your booking and proceed to secure payment.</p>'
-      +'<div class="fld"><label class="lbl" for="contactName">Full name *</label><input id="contactName" value="'+eH(S.name)+'" oninput="S.name=this.value;syncPayButton()" placeholder="Name" autocomplete="name"></div>'
-      +'<div class="fld"><label class="lbl" for="contactEmail">Email address *</label><input id="contactEmail" value="'+eH(S.email)+'" oninput="S.email=this.value;syncPayButton()" placeholder="Email" type="email" autocomplete="email" inputmode="email"></div>'
-      +'<div class="fld"><label class="lbl" for="contactPhone">Phone / WhatsApp *</label><input id="contactPhone" value="'+eH(S.phone)+'" oninput="S.phone=this.value;syncPayButton()" placeholder="Telephone" type="tel" autocomplete="tel" inputmode="tel"></div>'
-      +'<div class="fld"><label class="lbl" for="contactNotes">Special requests or notes</label><textarea id="contactNotes" oninput="S.notes=this.value" placeholder="Dietary needs, celebrations, special requests...">'+eH(S.notes)+'</textarea></div>'
-      +'<div class="sbox"><div class="slbl">BOOKING SUMMARY</div>'
-      +'<div class="sr"><span class="sk">'+fD(S.ci)+' — '+fD(S.co)+'</span><span class="sv">'+nts()+' nights · '+S.guests+' guest'+(S.guests>1?"s":"")+'</span></div>'
+    html+='<h2 class="eh2">'+t("ct_title")+'</h2><p class="esub">'+t("ct_sub")+'</p>'
+      +'<div class="fld"><label class="lbl" for="contactName">'+t("ct_name")+'</label><input id="contactName" value="'+eH(S.name)+'" oninput="S.name=this.value;syncPayButton()" placeholder="'+t("ct_name_ph")+'" autocomplete="name"></div>'
+      +'<div class="fld"><label class="lbl" for="contactEmail">'+t("ct_email")+'</label><input id="contactEmail" value="'+eH(S.email)+'" oninput="S.email=this.value;syncPayButton()" placeholder="'+t("ct_email_ph")+'" type="email" autocomplete="email" inputmode="email"></div>'
+      +'<div class="fld"><label class="lbl" for="contactPhone">'+t("ct_phone")+'</label><input id="contactPhone" value="'+eH(S.phone)+'" oninput="S.phone=this.value;syncPayButton()" placeholder="'+t("ct_phone_ph")+'" type="tel" autocomplete="tel" inputmode="tel"></div>'
+      +'<div class="fld"><label class="lbl" for="contactNotes">'+t("ct_notes")+'</label><textarea id="contactNotes" oninput="S.notes=this.value" placeholder="'+t("ct_notes_ph")+'">'+eH(S.notes)+'</textarea></div>'
+      +'<div class="sbox"><div class="slbl">'+t("sm_head")+'</div>'
+      +'<div class="sr"><span class="sk">'+fD(S.ci)+' — '+fD(S.co)+'</span><span class="sv">'+nts()+' '+nW(nts(),true)+' · '+S.guests+' '+t(S.guests>1?"guests":"guest")+'</span></div>'
       +acL+trL+petL
-      +'<div class="sr tot"><span class="sk">Total to Pay</span><span class="sv">'+f$(gTot())+' USD</span></div></div>'
+      +'<div class="sr tot"><span class="sk">'+t("sm_total")+'</span><span class="sv">'+f$(gTot())+' USD</span></div></div>'
       +(S.err?'<div class="err" role="alert">'+eH(S.err)+'</div>':'')
-      +'<label class="agree"><input type="checkbox" id="agreeBox"'+(S.agreed?' checked':'')+' onchange="S.agreed=this.checked;syncPayButton()"><span>I have read and accept the <a href="'+AGREEMENT_URL+'" target="_blank" rel="noopener">Vacation Rental &amp; Liability Waiver Agreement</a>, including the assumption of risk and release of liability. <span class="req">*</span></span></label>'
-      +'<div class="stripe-badge">Secure payment powered by Stripe</div>';
+      +'<label class="agree"><input type="checkbox" id="agreeBox"'+(S.agreed?' checked':'')+' onchange="S.agreed=this.checked;syncPayButton()"><span>'+t("agree",'<a href="'+AGREEMENT_URL+'" target="_blank" rel="noopener">'+t("agree_link")+'</a>')+' <span class="req">*</span></span></label>'
+      +'<div class="stripe-badge">'+t("stripe")+'</div>';
   }
 
   /* ═══ NAVIGATION ═══ */
@@ -411,12 +586,12 @@ function R(){
   if(S.paySlow&&S.sending&&S.step===2)html+='<div class="calm" role="status">'+MSG.slow+'</div>';
   if(S.payFail&&S.step===2)html+='<div class="calm" role="status">'+MSG.pay+'</div>';
   html+='<div class="nav">';
-  if(S.step>0)html+='<button class="bs" onclick="goB()">← Back</button>';
+  if(S.step>0)html+='<button class="bs" onclick="goB()">'+t("b_back")+'</button>';
   html+='<div class="spacer"></div>';
   if(S.step===0&&S.bootFail){html+='<button class="bp" onclick="retryBoot()">'+MSG.again+'</button>'}
-  else if(S.step===0){var can=S.ci&&S.co&&!S.stale;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()"'+(can?"":" disabled") +'>'+(S.ci&&S.co&&S.stale?"Checking availability…":"Continue →")+'</button>'}
-  if(S.step===1)html+='<button class="bp" onclick="goN()">Continue →</button>';
-  if(S.step===2){var can2=contactReady();html+='<button id="payBtn" class="bp'+(can2&&!S.sending?"":" dim")+'" onclick="pay()"'+(can2&&!S.sending?"":" disabled")+'>'+(S.sending?"Processing...":S.payFail?MSG.again+" →":"Pay "+f$(gTot())+" USD →")+'</button>'}
+  else if(S.step===0){var can=S.ci&&S.co&&!S.stale;html+='<button class="bp'+(can?"":" dim")+'" onclick="goN()"'+(can?"":" disabled") +'>'+(S.ci&&S.co&&S.stale?t("b_checking"):t("b_next"))+'</button>'}
+  if(S.step===1)html+='<button class="bp" onclick="goN()">'+t("b_next")+'</button>';
+  if(S.step===2){var can2=contactReady();html+='<button id="payBtn" class="bp'+(can2&&!S.sending?"":" dim")+'" onclick="pay()"'+(can2&&!S.sending?"":" disabled")+'>'+(S.sending?t("b_processing"):S.payFail?MSG.again+" →":t("b_pay",f$(gTot())))+'</button>'}
   html+='</div>';
   if((S.bootFail&&S.step===0)||(S.payFail&&S.step===2))html+='<p class="help">'+MSG.help+'</p>';
 
@@ -471,9 +646,9 @@ window.hDay=function(ts){
       if(!checkInWithinLeadWindow(date)){S.err=leadWindowMessage();R();return}
       S.ci=date;S.co=null;S.sel="out";R();return;
     }
-    if(hB(S.ci,date)){S.err="Selected dates overlap with an existing reservation.";R();return}
+    if(hB(S.ci,date)){S.err=t("e_overlap");R();return}
     var n=df(S.ci,date),se=gS(S.ci,date),min=se==="high"?MIN_H:(se==="mid"?MIN_M:MIN_L);
-    if(n<min){S.err="Minimum stay is "+min+" night"+(min===1?"":"s")+" during "+se+" season.";R();return}
+    if(n<min){S.err=t("e_min",min,nW(min),t("sl_"+se));R();return}
     S.co=date;S.sel="in";
     R();revealContinue();return;
   }
@@ -501,7 +676,7 @@ window.sQ=function(id,q){if(q<1)delete S.tr[id];else S.tr[id]=q;R()};
 window.goB=function(){S.step--;S.err="";S.payFail=false;R()};
 window.goN=function(){
   if(S.step===0&&S.stale)return;
-  if(S.step===0&&!(S.ci&&S.co)){S.err="Please select check-in and check-out dates.";R();return}
+  if(S.step===0&&!(S.ci&&S.co)){S.err=t("e_dates");R();return}
   S.step++;S.err="";R();
 };
 
@@ -523,10 +698,10 @@ function withRecaptcha(cb){
 window.pay=function(){
   if(!contactReady()){
     S.err=!S.name.trim()||!S.email.trim()||!S.phone.trim()
-      ?"Please fill in all required fields."
+      ?t("e_fill")
       :!emailValid()
-      ?"Please enter a valid email address."
-      :"Please tick the box to accept the Rental & Liability Waiver Agreement.";
+      ?t("e_email")
+      :t("e_tick");
     R();return
   }
   if(S.sending)return;
@@ -583,10 +758,10 @@ window.pay=function(){
         setTimeout(function(){window.top.location.href=stripeUrl},sent?250:0);
       }else{
         S.err=(data&&data.code==="RATES_CHANGED")
-          ?"Rates changed while this page was open. Please refresh the page before continuing."
+          ?t("e_rates")
           :(data&&data.code==="RECAPTCHA_FAILED")
-          ?"We could not verify this request. Please refresh the page and try again."
-          :(data&&data.message)||"We couldn't start the payment. Please try again or email info@casapapelillo.com.";
+          ?t("e_verify")
+          :beMsg(data&&data.message)||t("e_start");
         S.sending=false;R();
       }
     })
@@ -655,8 +830,8 @@ function applyCfg(cfg){
   TRANSPORT=(Array.isArray(cfg.transportation)?cfg.transportation:[]).map(function(i){
     return {
       id:i.id,
-      nm:i.name,
-      ds:i.desc,
+      nm:trText(i.id,"nm",i.name),
+      ds:trText(i.id,"ds",i.desc),
       pr:Number(i.price)
     };
   });
@@ -671,7 +846,7 @@ function recheckSelection(){
     var n=df(S.ci,S.co),se=gS(S.ci,S.co),min=se==="high"?MIN_H:(se==="mid"?MIN_M:MIN_L);
     bad=hB(S.ci,S.co)||n<min;
   }
-  if(bad){S.ci=null;S.co=null;S.sel="in";S.err="Availability just updated. Please choose your dates again."}
+  if(bad){S.ci=null;S.co=null;S.sel="in";S.err=t("e_avail")}
 }
 function loadBookingData(){
   var cached=bootGet();
@@ -683,7 +858,7 @@ function loadBookingData(){
     console.error("Availability call failed: "+String(err&&err.message||err));
     if(cached){S.bootFail=true;R();return}
     document.getElementById("app").innerHTML=
-      '<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>Reserve <span>Casa Papelillo</span></h1></div>'+
+      '<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>'+t("h1")+' <span>Casa Papelillo</span></h1></div>'+
       '<div class="calm" role="status">'+MSG.cal+'</div>'+
       '<div class="nav"><div class="spacer"></div><button class="bp" onclick="window.location.reload()">'+MSG.again+'</button></div>'+
       '<p class="help">'+MSG.help+'</p>';

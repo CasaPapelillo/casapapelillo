@@ -1,0 +1,915 @@
+/* Stripe Checkout + pending-payment poll. Never trust client totals. */
+var RECAPTCHA_MIN_SCORE = 0.5;   // 1.0 = very likely human, 0.0 = very likely a bot
+var RECAPTCHA_ACTION = "checkout";                 // must match grecaptcha.execute(..., {action}) in the widget
+var RECAPTCHA_HOSTNAMES = ["casapapelillo.github.io"]; // pages allowed to mint tokens (live and ?env=dev)
+// Shown when the bot check fails. The request is still refused; this only gives
+// a real guest whose browser blocks Google a way to finish the booking.
+var RECAPTCHA_SOFT_FAIL = true;
+var RECAPTCHA_SOFT_FAIL_MESSAGE =
+  "We couldn't complete this booking online. Please email info@casapapelillo.com " +
+  "or WhatsApp +1 (315) 262-0362 with your dates and we'll finish it for you.";
+
+// SPAN3: same reply as always, with the sentence in Spanish for Spanish bookings.
+function createCheckoutSession(data, forceTestMode) {
+  return jr(localizedReply_(checkoutSessionReply_(data, forceTestMode), data && data.lang));
+}
+
+function checkoutSessionReply_(data, forceTestMode) {
+  // The caller wraps this reply, so here jr() just hands the object back.
+  const jr = function (reply) { return reply; };
+  try {
+    const stripeMode = getStripeMode(forceTestMode);
+    const stripeSecret = getStripeSecret(stripeMode);
+    validateConfig(stripeMode);
+
+    // Never trust client-side totals, season counts, or prices.
+    // The browser supplies choices; the server determines billable facts.
+    const checkIn = normalizeIsoDate(data.checkIn);
+    const checkOut = normalizeIsoDate(data.checkOut);
+
+    if (!checkIn || !checkOut) {
+      return jr({ success: false, message: "Invalid check-in or check-out date." });
+    }
+
+    const checkInDate = parseIsoDate(checkIn);
+    const checkOutDate = parseIsoDate(checkOut);
+
+    if (checkOutDate <= checkInDate) {
+      return jr({ success: false, message: "Check-out must be after check-in." });
+    }
+
+    if (!String(data.name || "").trim() ||
+        !String(data.email || "").trim() ||
+        !String(data.phone || "").trim()) {
+      return jr({ success: false, message: "Name, email, and phone are required." });
+    }
+
+    // The guest must have ticked the acceptance box in the widget. This is the
+    // server-side backstop for the clickwrap: no acceptance, no checkout.
+    if (!(data.agreementAccepted === true || String(data.agreementAccepted) === "true")) {
+      return jr({ success: false, message: "Please accept the Rental & Liability Waiver Agreement to continue." });
+    }
+
+    // Bot gate. Verified server-side against Google; a missing or failed token is
+    // refused. Soft fail returns a code the widget does not special-case, so the
+    // widget prints the contact message instead of "refresh and try again".
+    var bot = verifyRecaptcha_(data.recaptchaToken);
+    if (!bot.ok) {
+      return jr(RECAPTCHA_SOFT_FAIL
+        ? { success: false, code: "VERIFY_BY_CONTACT", message: RECAPTCHA_SOFT_FAIL_MESSAGE }
+        : { success: false, code: "RECAPTCHA_FAILED",
+            message: "We could not verify this request. Please refresh the page and try again." });
+    }
+
+    const guests = toNonNegativeInteger(data.guests);
+    if (guests < 1 || guests > 12) {
+      return jr({ success: false, message: "Guests must be between 1 and 12." });
+    }
+
+    const config = getBookingConfig();
+
+    // Pets are capped by MAX_PETS in the Settings tab. A cap of 0 means the
+    // property does not accept pets at all.
+    const pets = toNonNegativeInteger(data.pets);
+    if (pets > config.maxPets) {
+      return jr({
+        success: false,
+        message: config.maxPets > 0
+          ? "Up to " + config.maxPets + " pet" + (config.maxPets === 1 ? "" : "s") + " can be included in a booking."
+          : "We are not able to accept pets for this stay."
+      });
+    }
+
+    // Server-side booking-window enforcement.
+    // MIN_LEAD_DAYS = 1 means the earliest check-in is tomorrow.
+    // MAX_LEAD_DAYS = 365 means check-in cannot be more than 365 days away.
+    const todayIso = Utilities.formatDate(
+      new Date(),
+      PROPERTY_TIME_ZONE,
+      "yyyy-MM-dd"
+    );
+    const today = parseIsoDate(todayIso);
+    const earliestCheckIn = addUtcDays(today, config.minLeadDays);
+    const latestCheckIn = addUtcDays(today, config.maxLeadDays);
+
+    if (checkInDate < earliestCheckIn) {
+      return jr({
+        success: false,
+        code: "TOO_SOON",
+        message:
+          "Bookings require at least " +
+          config.minLeadDays +
+          " day" +
+          (config.minLeadDays === 1 ? "" : "s") +
+          " advance notice."
+      });
+    }
+
+    if (checkInDate > latestCheckIn) {
+      return jr({
+        success: false,
+        code: "TOO_FAR",
+        message:
+          "Bookings can only be made up to " +
+          config.maxLeadDays +
+          " days in advance."
+      });
+    }
+
+    // Re-check availability on the server right before creating Stripe Checkout.
+    if (rangeTouchesBlockedDates(checkIn, checkOut)) {
+      return jr({
+        success: false,
+        message: "Those dates overlap with an existing reservation. Please choose different dates."
+      });
+    }
+
+    // Stale-session protection:
+    // The client does not set pricing, but it tells us what rates it showed.
+    // If the Sheet changed after the page was loaded, stop before creating
+    // Stripe Checkout so the guest never sees a surprise total.
+    const displayedRateLow = Number(data.displayedRateLow);
+    const displayedRateHigh = Number(data.displayedRateHigh);
+
+    if (
+      !isFinite(displayedRateLow) ||
+      !isFinite(displayedRateHigh) ||
+      displayedRateLow !== config.rates.low ||
+      displayedRateHigh !== config.rates.high
+    ) {
+      return jr({
+        success: false,
+        code: "RATES_CHANGED",
+        message: "Rates have changed. Please refresh the booking page and try again."
+      });
+    }
+
+    const breakdown = calculateNightBreakdown(
+      checkIn,
+      checkOut,
+      config.highSeasons,
+      config.midSeasons
+    );
+    const nights = breakdown.high + breakdown.mid + breakdown.low;
+
+    if (nights < 1) {
+      return jr({ success: false, message: "Reservation must include at least one night." });
+    }
+
+    // Preserve the widget's current mixed-season rule:
+    // whichever season has at least as many nights determines the minimum stay.
+    // Mid-season rate guard. Only enforced when the stay actually contains
+    // mid-season nights, so an older cached widget can still book low/high.
+    if (breakdown.mid > 0) {
+      const displayedRateMid = Number(data.displayedRateMid);
+
+      if (!isFinite(displayedRateMid) || displayedRateMid !== config.rates.mid) {
+        return jr({
+          success: false,
+          code: "RATES_CHANGED",
+          message: "Rates have changed. Please refresh the booking page and try again."
+        });
+      }
+    }
+
+    // Whichever season holds the most nights sets the minimum stay.
+    // Ties go to the stricter season: high, then mid.
+    const staySeason =
+      breakdown.high >= breakdown.mid && breakdown.high >= breakdown.low
+        ? "high"
+        : breakdown.mid >= breakdown.low
+          ? "mid"
+          : "low";
+    const minNights =
+      staySeason === "high"
+        ? config.minimumNights.high
+        : staySeason === "mid"
+          ? config.minimumNights.mid
+          : config.minimumNights.low;
+
+    if (nights < minNights) {
+      return jr({
+        success: false,
+        message:
+          "Minimum stay is " +
+          minNights +
+          " night" +
+          (minNights === 1 ? "" : "s") +
+          " during " +
+          staySeason +
+          " season."
+      });
+    }
+
+    return createBookingSession_({
+      data: data, stripeMode: stripeMode, stripeSecret: stripeSecret, config: config,
+      checkIn: checkIn, checkOut: checkOut, breakdown: breakdown, nights: nights,
+      guests: guests, pets: pets, bot: bot
+    });
+  } catch (error) {
+    console.error("createCheckoutSession error: " + error.toString());
+    return jr({
+      success: false,
+      message: "We couldn't start the payment. Please try again or email info@casapapelillo.com."
+    });
+  }
+}
+
+// SPAN3 step 7: one session builder for the widget and the Payment Links tab.
+// With no q.link this is the widget path, unchanged.
+function createBookingSession_(q) {
+  const jr = function (reply) { return reply; };
+  const data = q.data, stripeMode = q.stripeMode, stripeSecret = q.stripeSecret, config = q.config;
+  const checkIn = q.checkIn, checkOut = q.checkOut, breakdown = q.breakdown, nights = q.nights;
+  const guests = q.guests, pets = q.pets, bot = q.bot, link = q.link || null;
+  const fixedAmount = link && link.amount > 0 ? link.amount : 0;
+
+  const fd = {};
+  fd["payment_method_types[0]"] = "card";
+  fd["mode"] = "payment";
+  // The widget sends lang "es" when it is opened from a Spanish page.
+  // Anything else, or nothing, keeps the English thank-you page.
+  const bookingLang = bookingLang_(data.lang);
+  fd["success_url"] = (bookingLang === "es" ? THANK_YOU_URL_ES : THANK_YOU_URL) + "?sid={CHECKOUT_SESSION_ID}";
+  fd["cancel_url"] = cancelUrlFor_(stripeMode, bookingLang);
+
+  // The payment page closes after CHECKOUT_EXPIRY_MINUTES. Dates are checked
+  // when the page opens, so a short window stops a guest paying for nights
+  // another channel has sold in the meantime.
+  fd["expires_at"] = String(Math.floor(Date.now() / 1000) + CHECKOUT_EXPIRY_MINUTES * 60);
+
+  if (String(data.email || "").trim()) fd["customer_email"] = String(data.email).trim();
+
+  // Create a Stripe Customer for this booking
+  fd["customer_creation"] = "always";
+
+  // Save the card for possible future off-session charges. Stays only: the
+  // agreement authorizes it (Payment section). Fee links save no card.
+  const savesCard = !link || link.flow === "booking";
+  if (savesCard) {
+    fd["payment_intent_data[setup_future_usage]"] = "off_session";
+    // The agreement tick box already covers this, so Stripe's line is hidden.
+    fd["consent_collection[payment_method_reuse_agreement][position]"] = "hidden";
+  }
+
+  fd["metadata[guest_name]"] = String(data.name).trim();
+  fd["metadata[phone]"] = String(data.phone).trim();
+  fd["metadata[check_in]"] = checkIn;
+  fd["metadata[check_out]"] = checkOut;
+  fd["metadata[nights]"] = String(nights);
+  fd["metadata[guests]"] = String(guests);
+  fd["metadata[pets]"] = String(pets);
+  fd["metadata[high_nights]"] = String(breakdown.high);
+  fd["metadata[mid_nights]"] = String(breakdown.mid);
+  fd["metadata[low_nights]"] = String(breakdown.low);
+  fd["metadata[notes]"] = String(data.notes || "").substring(0, 500);
+  fd["metadata[lang]"] = bookingLang;
+
+  // SPAN3: Spanish bookings open Stripe in Spanish. English sends no locale,
+  // so English sessions stay exactly as they were.
+  if (bookingLang === "es") fd["locale"] = STRIPE_LOCALE_ES;
+
+  if (link) applyLinkFields_(fd, link, bookingLang);
+  else fd["custom_text[submit][message]"] = linkGuestLine_({ checkIn: checkIn, checkOut: checkOut }, bookingLang, String(data.name).trim().substring(0, 80));
+
+  let idx = 0;
+
+  if (fixedAmount) idx = addStripeLineItem(fd, idx, link.itemName, link.itemDesc, fixedAmount, 1);
+
+  if (!fixedAmount && breakdown.high > 0) {
+    idx = addStripeLineItem(
+      fd,
+      idx,
+      stripeSeasonName_("high", bookingLang),
+      stripeDates_(checkIn, checkOut, bookingLang),
+      config.rates.high,
+      breakdown.high
+    );
+  }
+
+  if (!fixedAmount && breakdown.mid > 0) {
+    idx = addStripeLineItem(
+      fd,
+      idx,
+      stripeSeasonName_("mid", bookingLang),
+      stripeDates_(checkIn, checkOut, bookingLang),
+      config.rates.mid,
+      breakdown.mid
+    );
+  }
+
+  if (!fixedAmount && breakdown.low > 0) {
+    idx = addStripeLineItem(
+      fd,
+      idx,
+      stripeSeasonName_("low", bookingLang),
+      stripeDates_(checkIn, checkOut, bookingLang),
+      config.rates.low,
+      breakdown.low
+    );
+  }
+
+  // Rebuild transportation entirely from the server-side catalog.
+  // Client price/name/description fields are intentionally ignored.
+  let transportTotal = 0;
+  const requestedTransport = Array.isArray(data.transport) ? data.transport : [];
+  const safeTransport = [];
+
+  for (let t = 0; t < requestedTransport.length; t++) {
+    const requested = requestedTransport[t] || {};
+    const id = String(requested.id || "");
+    const item = config.transportCatalog[id];
+
+    if (!item) {
+      return jr({
+        success: false,
+        message: "Unknown transportation option: " + id
+      });
+    }
+
+    const qty = toNonNegativeInteger(requested.qty) || 1;
+    if (qty < 1 || qty > 20) {
+      return jr({
+        success: false,
+        message: "Invalid transportation quantity for " + item.name
+      });
+    }
+
+    transportTotal += item.price * qty;
+
+    idx = addStripeLineItem(
+      fd,
+      idx,
+      stripeTransportText_(id, "name", item.name, bookingLang),
+      stripeTransportText_(id, "desc", item.desc, bookingLang),
+      item.price,
+      qty
+    );
+
+    safeTransport.push({
+      id: id,
+      name: item.name,
+      desc: item.desc,
+      price: String(item.price),
+      qty: String(qty)
+    });
+  }
+
+  // Pet fee is per pet, per night, priced from the Settings tab. Billed as a
+  // single line at the nightly rate with quantity pets x nights, so the
+  // Stripe receipt shows how the figure was arrived at.
+  let petTotal = 0;
+  if (!fixedAmount && pets > 0 && config.petRate > 0) {
+    petTotal = config.petRate * pets * nights;
+    idx = addStripeLineItem(
+      fd,
+      idx,
+      bookingLang === "es" ? "Cargo por mascotas" : "Pet fee",
+      bookingLang === "es"
+        ? pets + (pets === 1 ? " mascota" : " mascotas") + " x " + nights + (nights === 1 ? " noche" : " noches")
+        : pets + " pet" + (pets === 1 ? "" : "s") + " x " + nights + " night" + (nights === 1 ? "" : "s"),
+      config.petRate,
+      pets * nights
+    );
+  }
+
+  const rentalTotal = fixedAmount || rentalTotalFor(breakdown, config.rates);
+
+  const grandTotal = rentalTotal + transportTotal + petTotal;
+
+  const resp = UrlFetchApp.fetch("https://api.stripe.com/v1/" + (link ? "payment_links" : "checkout/sessions"), {
+    method: "post",
+    headers: {
+      Authorization: "Bearer " + stripeSecret
+    },
+    payload: link ? paymentLinkPayload_(fd, bookingLang) : fd,
+    muteHttpExceptions: true
+  });
+
+  const session = JSON.parse(resp.getContentText());
+
+  if (session.error) {
+    // Full detail goes to the execution log only, never back to the browser.
+    console.error("Stripe checkout error: " + session.error.message +
+      " | PARAM:" + (session.error.param || "?"));
+    return jr({
+      success: false,
+      message: link ? session.error.message : "We couldn't start the payment. Please try again or email info@casapapelillo.com."
+    });
+  }
+
+  const emailData = {
+    name: String(data.name).trim(),
+    email: String(data.email).trim(),
+    phone: String(data.phone).trim(),
+    guests: String(guests),
+    pets: String(pets),
+    petRate: config.petRate,
+    petTotal: petTotal,
+    checkIn: checkIn,
+    checkOut: checkOut,
+    nights: String(nights),
+    nightBreakdown: {
+      high: breakdown.high,
+      mid: breakdown.mid,
+      low: breakdown.low
+    },
+    rateHigh: config.rates.high,
+    rateMid: config.rates.mid,
+    rateLow: config.rates.low,
+    rentalTotal: rentalTotal,
+    transport: safeTransport,
+    grandTotal: grandTotal,
+    notes: String(data.notes || ""),
+    lang: bookingLang,
+    // Proof the guest ticked the agreement box at checkout. Stamped into
+    // the PDF so the document itself records when assent was given.
+    acceptedAt: String(data.acceptedAt || ""),
+    agreementAccepted: data.agreementAccepted === true || String(data.agreementAccepted) === "true",
+    stripeMode: stripeMode,
+    // Durable record of the bot check. Cloud logs are dropped after about a
+    // week, so the verdict is kept with the booking instead of only in the log.
+    recaptcha: bot.skipped ? "skipped (no secret configured)"
+             : bot.errored ? "allowed through (Google unreachable)"
+             : ("passed, score " + (typeof bot.score === "number" ? bot.score : "n/a")),
+    createdAt: new Date().toISOString()
+  };
+  if (link) {
+    emailData.linkType = link.type;
+    emailData.linkFlow = link.flow;       // "booking" = full widget path; "fee" = no stay
+    emailData.amountOverride = !!fixedAmount && link.flow === "booking";
+    emailData.recaptcha = "n/a (payment link)";
+  }
+
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(BOOKING_PROPERTY_PREFIX + session.id, JSON.stringify(emailData));
+
+  return jr({
+    success: true,
+    sessionId: session.id,
+    url: link ? paymentLinkUrl_(session.url, data.email, bookingLang) : session.url
+  });
+}
+
+function addStripeLineItem(fd, idx, name, description, unitAmountDollars, quantity) {
+  fd["line_items[" + idx + "][price_data][currency]"] = STRIPE_CURRENCY;
+  fd["line_items[" + idx + "][price_data][product_data][name]"] = name;
+  fd["line_items[" + idx + "][price_data][product_data][description]"] = description;
+  fd["line_items[" + idx + "][price_data][unit_amount]"] = String(unitAmountDollars * 100);
+  fd["line_items[" + idx + "][quantity]"] = String(quantity);
+
+  return idx + 1;
+}
+
+// One poll at a time. Two overlapping runs could both see a session as paid and
+// send the guest two confirmations and write two Direct Bookings rows.
+function sendPendingConfirmations(forceTestMode) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    console.log("sendPendingConfirmations: another run holds the lock - skipping.");
+    return { success: false, skipped: "another run in progress" };
+  }
+  try {
+    return sendPendingConfirmationsLocked_(forceTestMode);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sendPendingConfirmationsLocked_(forceTestMode) {
+  const currentMode = getStripeMode(forceTestMode);
+
+  // Only filter by mode when the caller explicitly asked for TEST. Every
+  // stored booking carries its own stripeMode and getStripeSecret(bookingMode)
+  // below picks the matching key, so an ambient-mode filter is unnecessary --
+  // and actively harmful from a time-driven trigger, where
+  // ScriptApp.getService().getUrl() returns the /dev URL, getStripeMode()
+  // therefore reports "test", and every LIVE booking is silently skipped.
+  const modeFilter = forceTestMode === true ? "test" : null;
+  const props = PropertiesService.getScriptProperties().getProperties();
+  let sent = false;
+  let checked = 0;
+  let skippedOtherMode = 0;
+  let expired = 0;
+  let errors = [];
+
+  for (const key in props) {
+    if (key.indexOf(BOOKING_PROPERTY_PREFIX) !== 0) {
+      continue;
+    }
+
+    // Read stored booking data first so test/live pending sessions can coexist.
+    let emailData;
+
+    try {
+      emailData = JSON.parse(props[key]);
+    } catch (error) {
+      errors.push({
+        sessionId: key.replace(BOOKING_PROPERTY_PREFIX, ""),
+        message: "Invalid stored booking data: " + error.toString()
+      });
+      continue;
+    }
+
+    // Purge abandoned checkouts. Bookings stored before createdAt existed
+    // have no timestamp and are left alone. Payment Links have their own
+    // 30-day close, below.
+    const isPaymentLink = key.indexOf(BOOKING_PROPERTY_PREFIX + "plink_") === 0;
+    if (emailData.createdAt && !isPaymentLink) {
+      const ageMs = Date.now() - new Date(emailData.createdAt).getTime();
+
+      if (ageMs > PENDING_BOOKING_TTL_MS) {
+        PropertiesService.getScriptProperties().deleteProperty(key);
+        expired++;
+        continue;
+      }
+    }
+
+    // Bookings created before test/live separation are treated as LIVE.
+    const bookingMode = emailData.stripeMode === "test" ? "test" : "live";
+
+    if (modeFilter && bookingMode !== modeFilter) {
+      skippedOtherMode++;
+      continue;
+    }
+
+    checked++;
+
+    const sessionId = key.replace(BOOKING_PROPERTY_PREFIX, "");
+
+    try {
+      const stripeSecret = getStripeSecret(bookingMode);
+
+      const resp = UrlFetchApp.fetch(
+        "https://api.stripe.com/v1/checkout/sessions" +
+          (isPaymentLink ? "?status=complete&limit=1&payment_link=" + sessionId : "/" + sessionId), {
+        method: "get",
+        headers: {
+          Authorization: "Bearer " + stripeSecret
+        },
+        muteHttpExceptions: true
+      });
+
+      let session = JSON.parse(resp.getContentText());
+
+      if (isPaymentLink && !session.error) {
+        session = session.data && session.data[0];
+        if (!session) {
+          if (closePaymentLinkIfDue_(sessionId, emailData, stripeSecret)) {
+            PropertiesService.getScriptProperties().deleteProperty(key);
+            expired++;
+          }
+          continue;
+        }
+      }
+
+      if (session.error) {
+        errors.push({
+          sessionId: sessionId,
+          message: session.error.message || "Stripe returned an error."
+        });
+        continue;
+      }
+
+      // Closed unpaid: the guest never paid. Forget it now rather than
+      // asking Stripe about it for another two days.
+      if (session.status === "expired") {
+        if (emailData.linkType) markLinkRow_(sessionId, "Expired");
+        PropertiesService.getScriptProperties().deleteProperty(key);
+        expired++;
+        continue;
+      }
+
+      if (session.payment_status === "paid") {
+        // SPAN3 step 7: fees with no stay (deposit, late check-out, event add-on).
+        if (emailData.linkType) stampLinkAcceptance_(emailData, session);
+        if (emailData.linkFlow === "fee") {
+          linkFeePaid_(emailData, session.id, sessionId);
+          PropertiesService.getScriptProperties().deleteProperty(key);
+          sent = true;
+          continue;
+        }
+
+        // Re-check the dates now that the money is in. On a clash, hold the
+        // confirmation and the ledger row, and alert the team instead.
+        const clash = paidStayClash_(emailData, session.id);
+
+        // SPAN3: kept for the post-stay email, which reads the ledger (no lang there).
+        rememberGuestLang_(emailData);
+
+        if (clash) {
+          sendDoubleBookingAlert_(emailData, session.id, clash);
+          if (emailData.linkType) markLinkRow_(sessionId, "Paid, dates clash: see email");
+        } else {
+          sendBookingNotification(emailData, session.id);
+          sendGuestConfirmation(emailData, session.id);
+
+          // Ledger last: the emails matter more than the row.
+          recordDirectBooking_(emailData, session.id);
+          if (emailData.linkType) markLinkRow_(sessionId, "Paid");
+        }
+
+        PropertiesService.getScriptProperties().deleteProperty(key);
+        sent = true;
+      }
+    } catch (error) {
+      errors.push({
+        sessionId: sessionId,
+        message: error.toString()
+      });
+    }
+  }
+
+  // SPAN3 step 7: rows ticked in the Payment Links tab. Never stops the poll.
+  try {
+    processPaymentLinks_();
+  } catch (error) {
+    errors.push({ sessionId: "Payment Links", message: error.toString() });
+  }
+
+  return {
+    success: sent,
+    mode: currentMode,
+    checked: checked,
+    skippedOtherMode: skippedOtherMode,
+    expired: expired,
+    errors: errors
+  };
+}
+
+function verifyRecaptcha_(token) {
+  var secret = PropertiesService.getScriptProperties().getProperty("RECAPTCHA_SECRET");
+  if (!secret) {
+    // Fail closed: the secret has been set since Sept 2026. Its absence is a fault.
+    console.error("reCAPTCHA: RECAPTCHA_SECRET is missing from Script Properties - refusing.");
+    return { ok: false, reason: "no secret configured" };
+  }
+
+  if (!token) {
+    console.log("reCAPTCHA: no token supplied by the widget.");
+    return { ok: false, reason: "missing token" };
+  }
+
+  var res;
+  try {
+    res = UrlFetchApp.fetch("https://www.google.com/recaptcha/api/siteverify", {
+      method: "post",
+      payload: { secret: secret, response: String(token) },
+      muteHttpExceptions: true
+    });
+  } catch (err) {
+    // Fail open only when Google itself cannot be reached: never let an outage
+    // at Google cost a booking. The verdict is stored with the booking.
+    console.log("reCAPTCHA check errored, allowing through: " + err.message);
+    return { ok: true, errored: true };
+  }
+
+  if (res.getResponseCode() !== 200) {
+    console.log("reCAPTCHA siteverify HTTP " + res.getResponseCode() + ", allowing through.");
+    return { ok: true, errored: true };
+  }
+
+  var body;
+  try {
+    body = JSON.parse(res.getContentText() || "{}");
+  } catch (err) {
+    console.log("reCAPTCHA reply unreadable, allowing through: " + err.message);
+    return { ok: true, errored: true };
+  }
+
+  if (!body.success) {
+    console.log("reCAPTCHA rejected: " + JSON.stringify(body["error-codes"] || []));
+    return { ok: false, reason: "rejected" };
+  }
+  if (body.action !== RECAPTCHA_ACTION) {
+    console.log("reCAPTCHA action mismatch: " + body.action);
+    return { ok: false, reason: "action mismatch" };
+  }
+  if (RECAPTCHA_HOSTNAMES.indexOf(String(body.hostname || "")) === -1) {
+    console.log("reCAPTCHA hostname mismatch: " + body.hostname);
+    return { ok: false, reason: "hostname mismatch" };
+  }
+  if (typeof body.score !== "number") {
+    console.log("reCAPTCHA reply carried no score.");
+    return { ok: false, reason: "no score" };
+  }
+  if (body.score < RECAPTCHA_MIN_SCORE) {
+    console.log("reCAPTCHA score too low: " + body.score);
+    return { ok: false, reason: "low score " + body.score };
+  }
+  console.log("reCAPTCHA passed, score " + body.score + " (threshold " + RECAPTCHA_MIN_SCORE + ")");
+  return { ok: true, score: body.score };
+}
+
+var CHECKOUT_EXPIRY_MINUTES = 31; // Stripe's minimum is 30; one spare minute absorbs clock drift.
+
+// Last line of defence against a double booking. The dates were free when the
+// payment page opened, but another channel may have sold them since, or a
+// direct booking paid in the last hour may not be in the summary yet.
+// Returns a short description of what clashes, or null when the dates are clear.
+// Fails open: if the check itself breaks, the booking is confirmed as before.
+function paidStayClash_(data, sessionId) {
+  // R6 (Oct 2026): Stripe TEST-mode payments skip the check. Old test rows are
+  // invisible on the widget calendar, so they raised false alerts and blocked
+  // testing. Live payments are checked exactly as before.
+  if (data && data.stripeMode === "test") return null;
+  try {
+    if (rangeTouchesBlockedDates(data.checkIn, data.checkOut)) {
+      return "Bookings Summary (Airbnb, Vrbo, Booking.com, direct or owner hold)";
+    }
+
+    const sheetName = data.stripeMode === "test"
+      ? DIRECT_BOOKINGS_TEST_SHEET_NAME
+      : DIRECT_BOOKINGS_SHEET_NAME;
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet || sheet.getLastRow() < 2) return null;
+
+    const tz = ss.getSpreadsheetTimeZone() || PROPERTY_TIME_ZONE;
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues();
+    const lastNight = formatIsoDate(addUtcDays(parseIsoDate(data.checkOut), -1));
+    const guestEnd = lastNight < data.checkIn ? data.checkIn : lastNight;
+
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i][13]).trim() === sessionId) continue;
+      const start = cellToIso_(rows[i][0], tz);
+      const checkout = cellToIso_(rows[i][1], tz);
+      if (!start || !checkout) continue;
+      let end = formatIsoDate(addUtcDays(parseIsoDate(checkout), -1));
+      if (end < start) end = start;
+      if (dateRangesOverlapInclusive(data.checkIn, guestEnd, start, end)) {
+        return sheetName + " row " + (i + 2) + " (" + String(rows[i][6] || "no name") +
+          ", " + start + " to " + checkout + ")";
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("paidStayClash_ failed, confirming as normal: " + error.toString());
+    return null;
+  }
+}
+
+// Paid, but the dates clash. Nothing is confirmed and nothing is written to
+// the ledger: the team decides which booking stands. The guest gets a short
+// holding note so a paid guest is never left in silence.
+function sendDoubleBookingAlert_(data, sessionId, clash) {
+  const isTest = data.stripeMode === "test";
+  const body = [
+    "A guest has PAID on the website for dates that are no longer free.",
+    "They have NOT been sent a booking confirmation, and the booking is NOT in the ledger.",
+    "",
+    "Clashes with: " + clash,
+    "",
+    "Guest: " + data.name,
+    "Email: " + data.email,
+    "Phone: " + data.phone,
+    "Dates: " + data.checkIn + " to " + data.checkOut + " (" + data.nights + " nights)",
+    "Guests: " + data.guests + ", pets: " + data.pets,
+    "Paid: $" + formatMoney(data.grandTotal) + " USD",
+    "Stripe session: " + sessionId + (isTest ? " (TEST mode)" : ""),
+    "Bot check: " + (data.recaptcha || "n/a"),
+    "",
+    "Decide today, then act by hand:",
+    "1. Keep this guest: cancel the other booking, add this stay to Direct Bookings, send the confirmation.",
+    "2. Keep the other booking: refund this payment in Stripe and offer the guest other dates.",
+    "",
+    "The guest has been sent a short note saying their payment is received and dates are being confirmed."
+  ].join("\n");
+
+  GmailApp.sendEmail(
+    PROPERTY_EMAIL,
+    (isTest ? "[TEST] " : "") + "ACTION NEEDED: possible double booking - " +
+      data.name + ", " + data.checkIn + " to " + data.checkOut,
+    body,
+    { bcc: INTERNAL_BCC, name: "Casa Papelillo Reservations" }
+  );
+
+  const note = holdingNote_(data);
+  GmailApp.sendEmail(data.email, note.subject, note.body, { replyTo: PROPERTY_EMAIL, name: note.from });
+}
+
+// SPAN3: the guest's holding note, in the booking's language.
+function holdingNote_(data) {
+  if (bookingLang_(data.lang) === "es") {
+    return {
+      subject: "Casa Papelillo: pago recibido, estamos confirmando sus fechas",
+      from: "Reservaciones Casa Papelillo",
+      body: "Hola, " + data.name + ":\n\n" +
+        "Gracias. Hemos recibido su pago para las fechas del " + prettyDateEs_(data.checkIn) + " al " + prettyDateEs_(data.checkOut) + ".\n\n" +
+        "Antes de enviarle su confirmación, estamos revisando estas fechas en nuestros otros canales de reservación. " +
+        "Nos comunicaremos con usted en un plazo de 24 horas. Si las fechas ya no están disponibles, le ofreceremos " +
+        "fechas alternativas o un reembolso completo.\n\n" +
+        "Reservaciones Casa Papelillo\n" +
+        "info@casapapelillo.com | WhatsApp +1 (315) 262-0362"
+    };
+  }
+  return {
+    subject: "Casa Papelillo - payment received, confirming your dates",
+    from: "Casa Papelillo Reservations",
+    body: "Dear " + data.name + ",\n\n" +
+      "Thank you. We have received your payment for " + data.checkIn + " to " + data.checkOut + ".\n\n" +
+      "Before we send your confirmation, we are checking these dates against our other booking channels. " +
+      "We will be in touch within 24 hours. If the dates are no longer available, we will offer you " +
+      "alternative dates or a full refund.\n\n" +
+      "Casa Papelillo Reservations\n" +
+      "info@casapapelillo.com | WhatsApp +1 (315) 262-0362"
+  };
+}
+
+// SPAN3: what Stripe's page shows for Spanish bookings. Display text only: the
+// ledger, the pending record and the emails keep reading the English values.
+var STRIPE_LOCALE_ES = "es-419"; // Stripe's Latin American Spanish
+
+var STRIPE_SEASON_NAMES = {
+  high: { en: "Casa Papelillo — High Season", es: "Casa Papelillo — Temporada alta" },
+  mid:  { en: "Casa Papelillo — Mid Season",  es: "Casa Papelillo — Temporada media" },
+  low:  { en: "Casa Papelillo — Low Season",  es: "Casa Papelillo — Temporada baja" }
+};
+
+var STRIPE_TRANSPORT_ES = {
+  sedan_zlo:    { name: "Aeropuerto de Manzanillo — Sedán",          desc: "Sedán privado, hasta 4 huéspedes" },
+  suburban_zlo: { name: "Aeropuerto de Manzanillo — Suburban",       desc: "Suburban privada, hasta 7 huéspedes" },
+  sedan_pvr:    { name: "Aeropuerto de Puerto Vallarta — Sedán",     desc: "Sedán privado, hasta 4 huéspedes" },
+  suburban_pvr: { name: "Aeropuerto de Puerto Vallarta — Suburban",  desc: "Suburban privada, hasta 7 huéspedes" }
+};
+
+var STRIPE_MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function stripeSeasonName_(season, lang) {
+  return STRIPE_SEASON_NAMES[season][lang === "es" ? "es" : "en"];
+}
+
+// "2026-12-16" becomes "16 dic 2026", as the Spanish widget writes it.
+function stripeDateEs_(iso) {
+  var p = String(iso).split("-");
+  return Number(p[2]) + " " + STRIPE_MONTHS_ES[Number(p[1]) - 1] + " " + p[0];
+}
+
+function stripeDates_(checkIn, checkOut, lang) {
+  if (lang === "es") return stripeDateEs_(checkIn) + " al " + stripeDateEs_(checkOut);
+  return checkIn + " to " + checkOut;
+}
+
+// A transfer with no Spanish row shows its English text, never a blank.
+function stripeTransportText_(id, field, english, lang) {
+  var row = STRIPE_TRANSPORT_ES[id];
+  return lang === "es" && row && row[field] ? row[field] : english;
+}
+
+// SPAN3: every sentence the checkout route can send, with its Spanish. Same rows
+// as the BE table in the widget; tools/check-i18n.js holds both to the English.
+var BACKEND_ES = [
+[/^Invalid check-in or check-out date\.$/,"La fecha de check-in o de check-out no es válida."],
+[/^Check-out must be after check-in\.$/,"La fecha de check-out debe ser posterior a la de check-in."],
+[/^Name, email, and phone are required\.$/,"Se requieren nombre, correo electrónico y celular."],
+[/^Please accept the Rental & Liability Waiver Agreement to continue\.$/,"Por favor, acepte el Contrato de Arrendamiento Vacacional y Exención de Responsabilidad para continuar."],
+[/^We couldn't complete this booking online\. Please email info@casapapelillo\.com or WhatsApp \+1 \(315\) 262-0362 with your dates and we'll finish it for you\.$/,"No pudimos completar esta reservación en línea. Por favor, escríbanos a info@casapapelillo.com o por WhatsApp al +1 (315) 262-0362 con sus fechas y nosotros la terminaremos por usted."],
+[/^We could not verify this request\. Please refresh the page and try again\.$/,"No pudimos verificar esta solicitud. Por favor, actualice la página e intente de nuevo."],
+[/^Guests must be between 1 and 12\.$/,"El número de huéspedes debe ser de 1 a 12."],
+[/^Up to 1 pet can be included in a booking\.$/,"Se puede incluir hasta 1 mascota en una reservación."],
+[/^Up to (\d+) pets can be included in a booking\.$/,"Se pueden incluir hasta $1 mascotas en una reservación."],
+[/^We are not able to accept pets for this stay\.$/,"No podemos aceptar mascotas en esta estancia."],
+[/^Bookings require at least 1 day advance notice\.$/,"Las reservaciones requieren al menos 1 día de anticipación."],
+[/^Bookings require at least (\d+) days advance notice\.$/,"Las reservaciones requieren al menos $1 días de anticipación."],
+[/^Bookings can only be made up to (\d+) days in advance\.$/,"Solo se puede reservar con hasta $1 días de anticipación."],
+[/^Those dates overlap with an existing reservation\. Please choose different dates\.$/,"Esas fechas se empalman con una reservación existente. Por favor, elija otras fechas."],
+[/^Rates have changed\. Please refresh the booking page and try again\.$/,"Las tarifas cambiaron. Por favor, actualice la página de reservación e intente de nuevo."],
+[/^Reservation must include at least one night\.$/,"La reservación debe incluir al menos una noche."],
+[/^Minimum stay is 1 night during high season\.$/,"La estancia mínima es de 1 noche en temporada alta."],
+[/^Minimum stay is 1 night during mid season\.$/,"La estancia mínima es de 1 noche en temporada media."],
+[/^Minimum stay is 1 night during low season\.$/,"La estancia mínima es de 1 noche en temporada baja."],
+[/^Minimum stay is (\d+) nights during high season\.$/,"La estancia mínima es de $1 noches en temporada alta."],
+[/^Minimum stay is (\d+) nights during mid season\.$/,"La estancia mínima es de $1 noches en temporada media."],
+[/^Minimum stay is (\d+) nights during low season\.$/,"La estancia mínima es de $1 noches en temporada baja."],
+[/^Unknown transportation option: (.*)$/,"Opción de transporte desconocida: $1"],
+[/^Invalid transportation quantity for (.*)$/,"Cantidad de transporte no válida para $1"],
+[/^We couldn't start the payment\. Please try again or email info@casapapelillo\.com\.$/,"No pudimos iniciar el pago. Por favor, intente de nuevo o escriba a info@casapapelillo.com."],
+[/^Unknown action\.$/,"No se pudo procesar la solicitud."],
+[/^Request could not be processed\.$/,"No se pudo procesar la solicitud."]
+];
+
+// A sentence with no row stays English, never blank. English replies pass untouched.
+function localizedReply_(reply, lang) {
+  if (bookingLang_(lang) !== "es" || !reply || !reply.message) return reply;
+  for (var i = 0; i < BACKEND_ES.length; i++) {
+    if (BACKEND_ES[i][0].test(reply.message)) {
+      reply.message = reply.message.replace(BACKEND_ES[i][0], BACKEND_ES[i][1]);
+      break;
+    }
+  }
+  return reply;
+}
+
+// Booking language sent by the widget. Only "es" is recognised; anything else is English.
+function bookingLang_(raw) {
+  return String(raw || "").trim().toLowerCase() === "es" ? "es" : "en";
+}
+
+// Where a guest who backs out of Stripe returns (R15a). TEST sessions go back to
+// the test widget in the same language; live ones to the website home page,
+// whose #book / #reservar hash reopens the booking popup.
+function cancelUrlFor_(mode, lang) {
+  if (mode === "test") return CANCEL_URL_TEST + (lang === "es" ? "&lang=es" : "");
+  return lang === "es" ? CANCEL_URL_ES : CANCEL_URL;
+}

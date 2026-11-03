@@ -105,7 +105,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-11-03b";
+var WIDGET_BUILD="2026-11-03c";
 (function(){
   if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
@@ -298,7 +298,7 @@ function R(){
     return'<div class="step'+(S.step<i?" dim":"")+'"><div class="dot'+(S.step===i?" active":S.step>i?" done":"")+'">'+(S.step>i?"✓":i+1)+'</div><span class="stxt'+(S.step===i?" b":"")+'">'+t+'</span></div>'
   }).join("");
 
-  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>Reserve <span>Casa Papelillo</span></h1></div><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? <a href="https://wa.me/13152620362" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:info@casapapelillo.com">email</a> us at <a href="https://wa.me/13152620362" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a> | <a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a></p><div class="steps">'+stH+'</div>';
+  html=(IS_DEV?'<div class="dev-banner"><strong>TEST MODE</strong><span>Stripe Sandbox · No real charges</span></div>':'')+'<div class="hd"><img class="logo" src="https://casapapelillo.com/wp-content/uploads/2026/04/cropped-logo-scaled-1-192x192.png" alt="Casa Papelillo" width="48" height="48" onerror="this.remove()"><h1>Reserve <span>Casa Papelillo</span></h1></div><p class="sub">Select your dates, add transportation, and pay securely.</p><p class="note">Questions? <a href="'+WA_URL+'" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:info@casapapelillo.com">email</a> us at <a href="'+WA_URL+'" target="_blank" rel="noopener" class="nw">+1 (315) 262-0362</a> | <a href="mailto:info@casapapelillo.com">info@casapapelillo.com</a></p><div class="steps">'+stH+'</div>';
 
   /* ═══ STEP 0: DATES ═══ */
   if(S.step===0){

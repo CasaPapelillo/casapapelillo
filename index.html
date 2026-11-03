@@ -105,7 +105,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-11-03f";
+var WIDGET_BUILD="2026-11-03g";
 (function(){
   if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
@@ -932,7 +932,9 @@ loadBookingData();
   var app=document.getElementById("app");
   if(typeof ResizeObserver!=="undefined"&&app){try{new ResizeObserver(queue).observe(app)}catch(e){}}
   if(typeof MutationObserver!=="undefined"&&app){try{new MutationObserver(queue).observe(app,{childList:true,subtree:true})}catch(e){}}
-  window.addEventListener("load",queue);
+  /* Late listeners (the page's height snippet can start after our first report): say the height again. */
+  function resend(){lastH=0;queue()}
+  window.addEventListener("load",function(){resend();[1000,2500,5000].forEach(function(t){setTimeout(resend,t)})});
   window.addEventListener("resize",queue);
   if(document.fonts&&document.fonts.ready){document.fonts.ready.then(queue)}
   window.addEventListener("message",function(e){

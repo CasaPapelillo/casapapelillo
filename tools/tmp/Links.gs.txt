@@ -9,12 +9,13 @@
 var LINKS_SHEET_NAME = "Payment Links";
 var LINKS_HEADERS = ["Type", "Guest", "Email", "Phone", "Check-in", "Check-out", "Guests", "Pets",
   "Language", "Amount USD", "Note", "Mode", "Create link", "Status", "Stripe link", "Warnings",
-  "Stripe session", "Link expires"];
+  "Stripe session", "Link expires", "Shown to guest"];
 var LC = { type: 0, guest: 1, email: 2, phone: 3, checkIn: 4, checkOut: 5, guests: 6, pets: 7, lang: 8,
-  amount: 9, note: 10, mode: 11, create: 12, status: 13, link: 14, warn: 15, session: 16, expires: 17 };
+  amount: 9, note: 10, mode: 11, create: 12, status: 13, link: 14, warn: 15, session: 16, expires: 17, show: 18 };
 var LINK_TYPES = ["Booking", "Rental deposit", "Late check-out", "Event"];
 var PAYMENT_LINK_LIFE_SECONDS = 23.5 * 60 * 60; // Stripe's limit is 24 h; half an hour spare
 var LINK_AGREEMENT_URL = "https://docs.google.com/document/d/1S3w7yzGJyRtWsB7udHsWQWnfqc7GrhOW3bqHtBrCFto/preview";
+var AGREEMENT_ES_BOOKMARK = "id.19o2a68hx964"; // on the Spanish title in the template; keep that paragraph
 
 function setupPaymentLinksTab() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -100,7 +101,8 @@ function handleLinkRow_(row, tz) {
     link: {
       type: String(row[LC.type]), flow: plan.flow, amount: plan.amount,
       itemName: linkItemName_(String(row[LC.type]), plan.flow, lang),
-      itemDesc: linkItemDesc_(plan, lang)
+      itemDesc: linkItemDesc_(plan, lang, String(row[LC.guest]).trim(), String(row[LC.show] || "").trim()),
+      guestLine: linkGuestLine_(plan, lang, String(row[LC.guest]).trim())
     }
   });
   if (!reply.success) return { status: "Error", warn: reply.message };
@@ -190,18 +192,47 @@ function linkItemName_(type, flow, lang) {
   return es ? "Casa Papelillo — Depósito" : "Casa Papelillo — Deposit";
 }
 
-function linkItemDesc_(plan, lang) {
-  if (plan.checkIn && plan.checkOut) return stripeDates_(plan.checkIn, plan.checkOut, lang);
-  if (plan.checkOut) return lang === "es" ? stripeDateEs_(plan.checkOut) : plan.checkOut;
-  return lang === "es" ? "Pago único" : "One payment";
+function linkStayText_(plan, lang) {
+  var es = lang === "es";
+  if (plan.checkIn && plan.checkOut) {
+    return es ? "del " + prettyDateEs_(plan.checkIn) + " al " + prettyDateEs_(plan.checkOut)
+              : prettyDate_(plan.checkIn) + " to " + prettyDate_(plan.checkOut);
+  }
+  if (plan.checkOut) return (es ? "salida el " : "departing ") + (es ? prettyDateEs_(plan.checkOut) : prettyDate_(plan.checkOut));
+  return "";
+}
+
+// What the guest reads on Stripe's page and receipt, so the link is plainly theirs.
+function linkItemDesc_(plan, lang, guest, shown) {
+  var es = lang === "es";
+  var parts = [(es ? "Para " : "For ") + guest];
+  var stay = linkStayText_(plan, lang);
+  if (stay) parts.push(stay);
+  if (plan.nights) {
+    var nightly = plan.amount / plan.nights;
+    parts.push(plan.nights + (es ? (plan.nights === 1 ? " noche" : " noches") : (plan.nights === 1 ? " night" : " nights")) +
+      (plan.amount && nightly === Math.round(nightly) ? " × $" + formatMoney(nightly) : ""));
+  }
+  if (plan.guests) parts.push(plan.guests + (es ? (plan.guests === 1 ? " huésped" : " huéspedes") : (plan.guests === 1 ? " guest" : " guests")));
+  if (shown) parts.push(shown);
+  return parts.join(" · ");
+}
+
+function linkGuestLine_(plan, lang, guest) {
+  var es = lang === "es";
+  var stay = linkStayText_(plan, lang);
+  return es
+    ? "Preparado por Casa Papelillo para " + guest + (stay ? ", " + stay : "") + ". ¿Tiene preguntas? info@casapapelillo.com o WhatsApp +1 (315) 262-0362."
+    : "Prepared by Casa Papelillo for " + guest + (stay ? ", " + stay : "") + ". Questions? info@casapapelillo.com or WhatsApp +1 (315) 262-0362.";
 }
 
 // Stay links need the agreement accepted on Stripe's page. Fees do not.
 function applyLinkFields_(fd, link, lang) {
+  fd["custom_text[submit][message]"] = link.guestLine;
   if (link.flow !== "booking") return;
   fd["consent_collection[terms_of_service]"] = "required";
   fd["custom_text[terms_of_service_acceptance][message]"] = lang === "es"
-    ? "He leído y acepto el [Contrato de Arrendamiento Vacacional y Exención de Responsabilidad](" + LINK_AGREEMENT_URL + "), incluida la asunción de riesgos y la liberación de responsabilidad."
+    ? "He leído y acepto el [Contrato de Arrendamiento Vacacional y Exención de Responsabilidad](" + LINK_AGREEMENT_URL + "#bookmark=" + AGREEMENT_ES_BOOKMARK + "), incluida la asunción de riesgos y la liberación de responsabilidad."
     : "I have read and accept the [Vacation Rental & Liability Waiver Agreement](" + LINK_AGREEMENT_URL + "), including the assumption of risk and release of liability.";
 }
 

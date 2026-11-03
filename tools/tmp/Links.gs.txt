@@ -1,0 +1,252 @@
+/* SPAN3 step 7: Payment Links tab in Booking Admin (Oliver, 3 Nov: run it all).
+   Staff fill a row and tick Create link. The 5-minute poll reads the tab, checks
+   the row, creates one Stripe session and writes the link back. Nothing is
+   public: there is no web route, so amounts can only come from the Sheet.
+   Live on save, no deployment. Mode "Test" uses the Stripe sandbox.
+   Set up once:   Run -> setupPaymentLinksTab
+   Run at once:   Run -> runPaymentLinksNow                                      */
+
+var LINKS_SHEET_NAME = "Payment Links";
+var LINKS_HEADERS = ["Type", "Guest", "Email", "Phone", "Check-in", "Check-out", "Guests", "Pets",
+  "Language", "Amount USD", "Note", "Mode", "Create link", "Status", "Stripe link", "Warnings",
+  "Stripe session", "Link expires"];
+var LC = { type: 0, guest: 1, email: 2, phone: 3, checkIn: 4, checkOut: 5, guests: 6, pets: 7, lang: 8,
+  amount: 9, note: 10, mode: 11, create: 12, status: 13, link: 14, warn: 15, session: 16, expires: 17 };
+var LINK_TYPES = ["Booking", "Rental deposit", "Late check-out", "Event"];
+var PAYMENT_LINK_LIFE_SECONDS = 23.5 * 60 * 60; // Stripe's limit is 24 h; half an hour spare
+var LINK_AGREEMENT_URL = "https://docs.google.com/document/d/1S3w7yzGJyRtWsB7udHsWQWnfqc7GrhOW3bqHtBrCFto/preview";
+
+function setupPaymentLinksTab() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(LINKS_SHEET_NAME);
+  if (sheet) { Logger.log("Tab already exists."); return; }
+  sheet = ss.insertSheet(LINKS_SHEET_NAME);
+  sheet.getRange(1, 1, 1, LINKS_HEADERS.length).setValues([LINKS_HEADERS])
+    .setFontWeight("bold").setBackground("#7f1d1d").setFontColor("#ffffff");
+  sheet.setFrozenRows(1);
+  var list = function (col, values) {
+    sheet.getRange(2, col, 300, 1).setDataValidation(
+      SpreadsheetApp.newDataValidation().requireValueInList(values, true).setAllowInvalid(false).build());
+  };
+  list(LC.type + 1, LINK_TYPES);
+  list(LC.lang + 1, ["English", "Spanish"]);
+  list(LC.mode + 1, ["Live", "Test"]);
+  sheet.getRange(2, LC.create + 1, 300, 1).insertCheckboxes();
+  sheet.getRange(2, LC.checkIn + 1, 300, 2).setNumberFormat("yyyy-mm-dd");
+  sheet.getRange(2, LC.phone + 1, 300, 1).setNumberFormat("@");
+  sheet.getRange(1, 1).setNote("Fill a row, tick Create link, wait up to 5 minutes. Guide in the README tab.");
+  sheet.getRange(1, LC.amount + 1).setNote("Booking: leave blank for the sheet price, or type an override. Other types: required.");
+  sheet.getRange(1, LC.mode + 1).setNote("Blank or Live is real money. Test is the Stripe sandbox.");
+  Logger.log("Payment Links tab created.");
+}
+
+function runPaymentLinksNow() {
+  Logger.log(JSON.stringify(processPaymentLinks_()));
+}
+
+function processPaymentLinks_() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(LINKS_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return { handled: 0 };
+  var tz = ss.getSpreadsheetTimeZone() || PROPERTY_TIME_ZONE;
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, LINKS_HEADERS.length).getValues();
+  var handled = 0;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][LC.create] !== true) continue;
+    handled++;
+    var rowNo = i + 2;
+    var out;
+    try {
+      out = handleLinkRow_(rows[i], tz);
+    } catch (err) {
+      out = { status: "Error", warn: err.message };
+    }
+    var cell = function (col) { return sheet.getRange(rowNo, col + 1); };
+    cell(LC.create).setValue(false);
+    if (out.keep) continue;
+    cell(LC.status).setValue(out.status);
+    cell(LC.warn).setValue(out.warn || "");
+    if (out.url) {
+      cell(LC.link).setValue(out.url);
+      cell(LC.session).setValue(out.session);
+      cell(LC.expires).setValue(out.expires);
+    }
+  }
+  return { handled: handled };
+}
+
+function handleLinkRow_(row, tz) {
+  // One session per link: a live or paid row never gets a second one.
+  var status = String(row[LC.status] || "");
+  if (String(row[LC.link] || "") && (status === "Link ready" || status.indexOf("Paid") === 0)) return { keep: true };
+
+  var plan = planLinkRow_(row, tz);
+  if (plan.refuse) return { status: "Refused", warn: plan.refuse };
+  // A warning stops the first tick. Ticking again with the same warning goes ahead.
+  if (plan.warn && String(row[LC.warn] || "") !== plan.warn) return { status: "Check warning, tick again", warn: plan.warn };
+
+  var stripeMode = String(row[LC.mode] || "").trim().toLowerCase() === "test" ? "test" : "live";
+  validateConfig(stripeMode);
+  var lang = String(row[LC.lang] || "").trim().toLowerCase() === "spanish" ? "es" : "en";
+  var reply = createBookingSession_({
+    data: {
+      name: String(row[LC.guest]).trim(), email: String(row[LC.email]).trim(),
+      phone: String(row[LC.phone] || "").trim(), notes: String(row[LC.note] || ""),
+      lang: lang, agreementAccepted: true, acceptedAt: "", transport: []
+    },
+    stripeMode: stripeMode, stripeSecret: getStripeSecret(stripeMode), config: plan.config,
+    checkIn: plan.checkIn, checkOut: plan.checkOut, breakdown: plan.breakdown, nights: plan.nights,
+    guests: plan.guests, pets: plan.pets, bot: {},
+    link: {
+      type: String(row[LC.type]), flow: plan.flow, amount: plan.amount,
+      itemName: linkItemName_(String(row[LC.type]), plan.flow, lang),
+      itemDesc: linkItemDesc_(plan, lang)
+    }
+  });
+  if (!reply.success) return { status: "Error", warn: reply.message };
+  return {
+    status: "Link ready", warn: plan.warn || "", url: reply.url, session: reply.sessionId,
+    expires: Utilities.formatDate(new Date(Date.now() + PAYMENT_LINK_LIFE_SECONDS * 1000), PROPERTY_TIME_ZONE, "yyyy-MM-dd HH:mm")
+  };
+}
+
+function planLinkRow_(row, tz) {
+  var type = String(row[LC.type] || "").trim();
+  var email = String(row[LC.email] || "").trim();
+  var amount = Number(String(row[LC.amount] || "").replace(/[$,\s]/g, ""));
+  if (!isFinite(amount) || amount < 0) return { refuse: "Amount USD is not a number." };
+  if (LINK_TYPES.indexOf(type) < 0) return { refuse: "Choose a Type." };
+  if (!String(row[LC.guest] || "").trim()) return { refuse: "Guest is required." };
+  if (!isGuestEmail_(email)) return { refuse: "Email is not valid." };
+
+  var plan = {
+    config: getBookingConfig(), flow: "fee", amount: amount, guests: 0, pets: 0, nights: 0,
+    checkIn: "", checkOut: "", breakdown: { high: 0, mid: 0, low: 0 }
+  };
+
+  if (type === "Rental deposit") {
+    if (!amount) return { refuse: "Type an amount." };
+    return plan;
+  }
+
+  plan.checkIn = cellToIso_(row[LC.checkIn], tz) || "";
+  plan.checkOut = cellToIso_(row[LC.checkOut], tz) || "";
+
+  if (type === "Late check-out") {
+    if (!amount) return { refuse: "Type an amount." };
+    if (!plan.checkOut) return { refuse: "Check-out (the departure date) is required." };
+    var arrivals = ledgerStays_(tz).filter(function (s) { return s.start === plan.checkOut; });
+    if (arrivals.length) plan.warn = "A guest arrives that day: " + arrivals[0].name + ".";
+    return plan;
+  }
+
+  // Booking and Event are stays.
+  if (!plan.checkIn || !plan.checkOut || plan.checkOut <= plan.checkIn) return { refuse: "Check-in and Check-out are required, in order." };
+  if (!String(row[LC.phone] || "").trim()) return { refuse: "Phone is required." };
+  plan.guests = toNonNegativeInteger(row[LC.guests]) || 1;
+  plan.pets = toNonNegativeInteger(row[LC.pets]);
+  if (plan.guests > 12) return { refuse: "Guests must be between 1 and 12." };
+  if (plan.pets > plan.config.maxPets) return { refuse: "Up to " + plan.config.maxPets + " pets." };
+  plan.breakdown = calculateNightBreakdown(plan.checkIn, plan.checkOut, plan.config.highSeasons, plan.config.midSeasons);
+  plan.nights = plan.breakdown.high + plan.breakdown.mid + plan.breakdown.low;
+
+  var checkIn = plan.checkIn, checkOut = plan.checkOut;
+  var overlap = ledgerStays_(tz).filter(function (s) { return s.start < checkOut && s.end > checkIn; });
+  var taken = rangeTouchesBlockedDates(checkIn, checkOut);
+
+  if (type === "Event") {
+    if (!amount) return { refuse: "Type an amount." };
+    if (!overlap.length && !taken) { plan.flow = "booking"; return plan; }
+    var others = overlap.filter(function (s) { return s.email.toLowerCase() !== email.toLowerCase(); });
+    if (others.length) return { refuse: "Dates overlap " + others[0].name + " (" + others[0].start + " to " + others[0].end + ")." };
+    if (!overlap.length) return { refuse: "Those dates are blocked." };
+    plan.warn = "Add-on fee to this guest's stay: no second block.";
+    return plan;
+  }
+
+  // Booking
+  if (taken) return { refuse: overlap.length ? "Dates overlap " + overlap[0].name + " (" + overlap[0].start + " to " + overlap[0].end + ")." : "Those dates are blocked." };
+  plan.flow = "booking";
+  var b = plan.breakdown;
+  var season = b.high >= b.mid && b.high >= b.low ? "high" : b.mid >= b.low ? "mid" : "low";
+  if (plan.nights < plan.config.minimumNights[season]) plan.warn = "Under the " + season + " season minimum of " + plan.config.minimumNights[season] + " nights.";
+  return plan;
+}
+
+// Stays in the ledger. End is the check-out day, which stays sellable.
+function ledgerStays_(tz) {
+  var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SUMMARY_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 3) return [];
+  return sheet.getRange(3, 1, sheet.getLastRow() - 2, 12).getValues().map(function (r) {
+    return { start: cellToIso_(r[0], tz), end: cellToIso_(r[1], tz), name: String(r[9] || "no name"), email: String(r[11] || "") };
+  }).filter(function (s) { return s.start && s.end; });
+}
+
+function linkItemName_(type, flow, lang) {
+  var es = lang === "es";
+  if (type === "Booking") return es ? "Casa Papelillo — Reservación" : "Casa Papelillo — Reservation";
+  if (type === "Event") return es ? "Casa Papelillo — Evento" : "Casa Papelillo — Event";
+  if (type === "Late check-out") return es ? "Casa Papelillo — Check-out tardío" : "Casa Papelillo — Late check-out";
+  return es ? "Casa Papelillo — Depósito" : "Casa Papelillo — Deposit";
+}
+
+function linkItemDesc_(plan, lang) {
+  if (plan.checkIn && plan.checkOut) return stripeDates_(plan.checkIn, plan.checkOut, lang);
+  if (plan.checkOut) return lang === "es" ? stripeDateEs_(plan.checkOut) : plan.checkOut;
+  return lang === "es" ? "Pago único" : "One payment";
+}
+
+// Stay links need the agreement accepted on Stripe's page. Fees do not.
+function applyLinkFields_(fd, link, lang) {
+  if (link.flow !== "booking") return;
+  fd["consent_collection[terms_of_service]"] = "required";
+  fd["custom_text[terms_of_service_acceptance][message]"] = lang === "es"
+    ? "He leído y acepto el [Contrato de Arrendamiento Vacacional y Exención de Responsabilidad](" + LINK_AGREEMENT_URL + "), incluida la asunción de riesgos y la liberación de responsabilidad."
+    : "I have read and accept the [Vacation Rental & Liability Waiver Agreement](" + LINK_AGREEMENT_URL + "), including the assumption of risk and release of liability.";
+}
+
+function stampLinkAcceptance_(data, session) {
+  var accepted = session.consent && session.consent.terms_of_service === "accepted";
+  data.agreementAccepted = !!accepted;
+  data.acceptedAt = new Date().toISOString() + (accepted ? " (accepted on the payment link)" : " (payment link, consent not recorded)");
+}
+
+function markLinkRow_(sessionId, status) {
+  try {
+    var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LINKS_SHEET_NAME);
+    if (!sheet || sheet.getLastRow() < 2) return;
+    var ids = sheet.getRange(2, LC.session + 1, sheet.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]).trim() === sessionId) {
+        sheet.getRange(i + 2, LC.status + 1).setValue(status);
+        return;
+      }
+    }
+  } catch (err) {
+    Logger.log("markLinkRow_ skipped: " + err.message);
+  }
+}
+
+// Deposit, late check-out or event add-on paid: no confirmation, no ledger row.
+function linkFeePaid_(data, sessionId) {
+  var isTest = data.stripeMode === "test";
+  var lines = [
+    data.linkType + " paid: $" + formatMoney(data.grandTotal) + " USD",
+    "Guest: " + data.name + " (" + data.email + ")",
+    "Note: " + (data.notes || "n/a"),
+    "Stripe session: " + sessionId + (isTest ? " (TEST mode)" : ""),
+    ""
+  ];
+  if (data.linkType === "Late check-out") {
+    lines.push("Staff to do:");
+    lines.push("1. Blocked Dates F:K: add a 1-night row for " + data.checkOut + ", Source Family & Friends, Name \"Late c/o hold - " + data.name + "\".");
+    lines.push("2. Add the fee to the stay's Gross Revenue, and note it (for example \"Late c/o 3 PM, 25%\").");
+  } else if (data.linkType === "Event") {
+    lines.push("Event add-on to an existing stay: no dates blocked. Add the fee to the stay's Gross Revenue by hand. Agency events: 10% commission, by hand.");
+  } else {
+    lines.push("Deposit: not revenue, no ledger entry.");
+  }
+  GmailApp.sendEmail(PROPERTY_EMAIL, (isTest ? "[TEST] " : "") + "Paid link - " + data.linkType + " - " + data.name, lines.join(NL),
+    { name: "Casa Papelillo Reservations" });
+  markLinkRow_(sessionId, "Paid");
+}

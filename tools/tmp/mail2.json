@@ -1,0 +1,10 @@
+[
+[
+"  let trS = \"\";\n  let trText = \"\";",
+"  // SPAN3 step 7: a typed amount replaces the nightly breakdown.\n  if (data.amountOverride) accom = row(\"season\", tx(\"Stay\", \"Estancia\"), nightsN + nightWord(nightsN));\n\n  let trS = \"\";\n  let trText = \"\";"
+],
+[
+"  let transportHtml = \"\";\n",
+"  if (data.amountOverride) {\n    accomHtml = '<tr><td style=\"padding:6px 0;color:#888\">Amount</td><td style=\"padding:6px 0\">Typed on the payment link (' + escapeHtml(data.linkType) + \")</td></tr>\";\n  }\n\n  let transportHtml = \"\";\n"
+]
+]

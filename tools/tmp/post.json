@@ -1,0 +1,94 @@
+[
+[
+"    var guest = {\n      name: name || \"there\",\n      email: email,\n      checkIn: checkIn,\n      checkOut: checkOut,\n      nights: nights,\n      bookingId: bookingId\n    };\n",
+"    var guest = {\n      name: name || \"there\",\n      email: email,\n      checkIn: checkIn,\n      checkOut: checkOut,\n      nights: nights,\n      bookingId: bookingId,\n      lang: props.getProperty(GUEST_LANG_PREFIX + email.toLowerCase()) === \"es\" ? \"es\" : \"en\"\n    };\n"
+],
+[
+"var POST_STAY_PREFIX = \"poststay_\";   // Script Property key prefix\n",
+"var POST_STAY_PREFIX = \"poststay_\";   // Script Property key prefix\nvar GUEST_LANG_PREFIX = \"guestlang_\"; // SPAN3: Spanish guests, keyed on lower-case email\n\n/* SPAN3: the ledger has no language column and the hourly rebuild owns its\n   layout, so a Spanish guest's language is kept in Script Properties instead.\n   Only \"es\" is stored; no entry means English, which also covers OTA guests and\n   every booking made before this. An English booking clears an earlier entry.\n   Never starts with \"booking_\": the poll reads that prefix. Failure here must\n   not block a paid booking. */\nfunction rememberGuestLang_(data) {\n  try {\n    var email = String(data.email || \"\").trim().toLowerCase();\n    if (!email) return;\n    var props = PropertiesService.getScriptProperties();\n    if (bookingLang_(data.lang) === \"es\") props.setProperty(GUEST_LANG_PREFIX + email, \"es\");\n    else props.deleteProperty(GUEST_LANG_PREFIX + email);\n  } catch (err) {\n    Logger.log(\"rememberGuestLang_ skipped: \" + err.message);\n  }\n}\n"
+],
+[
+"function sendPostStayEmail_(guest) {\n  var firstName = String(guest.name || \"\").trim().split(\" \")[0] || \"there\";\n  var stay = guest.checkIn && guest.checkOut\n    ? escapeHtml(guest.checkIn) + \" to \" + escapeHtml(guest.checkOut)\n    : \"\";\n\n",
+"function sendPostStayEmail_(guest) {\n  var msg = postStayMessage_(guest);\n\n  GmailApp.sendEmail(\n    guest.email,\n    msg.subject,\n    msg.plain,\n    {\n      bcc: PROPERTY_EMAIL + \", \" + INTERNAL_BCC,\n      replyTo: PROPERTY_EMAIL,\n      htmlBody: msg.html,\n      name: \"Casa Papelillo\"\n    }\n  );\n}\n\n/* SPAN3: built apart from the send, so a TEST copy uses the same code. The\n   guest's stored lang picks the wording; anything but \"es\" is English. */\nfunction postStayMessage_(guest) {\n  var es = guest.lang === \"es\";\n  var tx = function (en, spanish) { return es ? spanish : en; };\n  var firstName = String(guest.name || \"\").trim().split(\" \")[0] || \"there\";\n  var greeting = !es ? \"Dear \" + firstName + \",\"\n    : firstName === \"there\" ? \"Hola:\" : \"Hola, \" + firstName + \":\";\n  var stayText = guest.checkIn && guest.checkOut\n    ? (es ? \"del \" + prettyDateEs_(guest.checkIn) + \" al \" + prettyDateEs_(guest.checkOut)\n          : guest.checkIn + \" to \" + guest.checkOut)\n    : \"\";\n  var stay = stayText ? escapeHtml(stayText) : \"\";\n"
+],
+[
+"font-size:14px\">Thank You for Staying With Us</p>' +",
+"font-size:14px\">' + tx('Thank You for Staying With Us', 'Gracias por hospedarse con nosotros') + '</p>' +"
+],
+[
+"<p style=\"font-size:16px;margin:0 0 16px\">Dear ' + escapeHtml(firstName) + ',</p>' +",
+"<p style=\"font-size:16px;margin:0 0 16px\">' + escapeHtml(greeting) + '</p>' +"
+],
+[
+"    'Thank you for spending your time with us at Casa Papelillo' +\n    (stay ? ' <span style=\"color:#888\">(' + stay + ')</span>' : '') +\n    '. It was a pleasure having you on Chamela Bay, and we hope you left rested, ' +\n    'well fed, and already thinking about coming back.</p>' +\n",
+"    tx('Thank you for spending your time with us at Casa Papelillo', 'Gracias por pasar su tiempo con nosotros en Casa Papelillo') +\n    (stay ? ' <span style=\"color:#888\">(' + stay + ')</span>' : '') +\n    tx('. It was a pleasure having you on Chamela Bay, and we hope you left rested, ' +\n       'well fed, and already thinking about coming back.</p>',\n       '. Fue un placer recibirle en Bahía de Chamela, y esperamos que se lleve un buen descanso, ' +\n       'muy buena comida y las ganas de regresar.</p>') +\n"
+],
+[
+"    'We have three small asks before you get back to real life.</p>' +\n",
+"    tx('We have three small asks before you get back to real life.</p>', 'Tenemos tres pequeñas peticiones antes de que regrese a su rutina.</p>') +\n"
+],
+[
+">Five Quick Questions</h2>' +",
+">' + tx('Five Quick Questions', 'Cinco preguntas rápidas') + '</h2>' +"
+],
+[
+"    'Our guest feedback form takes about a minute. We read every answer, and it is how ' +\n    'we decide what to fix, what to add, and how to look after the next guests better. ' +\n    'Please be candid &mdash; the critical notes are the useful ones.</p>' +\n",
+"    tx('Our guest feedback form takes about a minute. We read every answer, and it is how ' +\n       'we decide what to fix, what to add, and how to look after the next guests better. ' +\n       'Please be candid &mdash; the critical notes are the useful ones.</p>',\n       'Nuestro formulario de comentarios toma alrededor de un minuto. Leemos cada respuesta, y así ' +\n       'decidimos qué corregir, qué agregar y cómo atender mejor a los próximos huéspedes. ' +\n       'Por favor, díganos las cosas con franqueza: los comentarios críticos son los más útiles.</p>') +\n"
+],
+[
+"font-weight:700\">Share Your Feedback &rarr;</a>' +",
+"font-weight:700\">' + tx('Share Your Feedback', 'Compartir sus comentarios') + ' &rarr;</a>' +"
+],
+[
+">Leave a Google Review</h2>' +",
+">' + tx('Leave a Google Review', 'Deje una reseña en Google') + '</h2>' +"
+],
+[
+"    'We are a small, family-run house rather than a hotel chain, and every review ' +\n    'helps other guests find us. A couple of honest sentences genuinely makes a difference.</p>' +\n",
+"    tx('We are a small, family-run house rather than a hotel chain, and every review ' +\n       'helps other guests find us. A couple of honest sentences genuinely makes a difference.</p>',\n       'Somos una casa pequeña y familiar, no una cadena hotelera, y cada reseña ayuda a otros ' +\n       'huéspedes a encontrarnos. Un par de frases sinceras hacen una gran diferencia.</p>') +\n"
+],
+[
+"font-weight:700\">Write a Google Review &rarr;</a>' +",
+"font-weight:700\">' + tx('Write a Google Review', 'Escribir una reseña en Google') + ' &rarr;</a>' +"
+],
+[
+"text-align:center\">Send Us Friends, Both of You Save</h2>' +",
+"text-align:center\">' + tx('Send Us Friends, Both of You Save', 'Recomiéndenos con sus amistades: ambos ahorran') + '</h2>' +"
+],
+[
+"    'For every guest you send our way, we say thank you twice:</p>' +\n",
+"    tx('For every guest you send our way, we say thank you twice:</p>', 'Por cada huésped que nos recomiende, le damos las gracias dos veces:</p>') +\n"
+],
+[
+"width:60%\">They receive</td>' +",
+"width:60%\">' + tx('They receive', 'Ellos reciben') + '</td>' +"
+],
+[
+"color:#E8863A\">10% off their stay</td></tr>' +",
+"color:#E8863A\">' + tx('10% off their stay', '10% de descuento en su estancia') + '</td></tr>' +"
+],
+[
+"color:#888\">You receive</td>' +",
+"color:#888\">' + tx('You receive', 'Usted recibe') + '</td>' +"
+],
+[
+"color:#E8863A\">10% off your next booking</td></tr>' +",
+"color:#E8863A\">' + tx('10% off your next booking', '10% de descuento en su próxima reservación') + '</td></tr>' +"
+],
+[
+"    'Just reply to this email with their name, or ask them to mention you when they book.</p>' +\n",
+"    tx('Just reply to this email with their name, or ask them to mention you when they book.</p>',\n       'Basta con responder a este correo con su nombre, o pídales que mencionen el suyo al reservar.</p>') +\n"
+],
+[
+"    'Anything at all &mdash; a question, a lost sunhat, dates for next year &mdash; reply here or ' +\n    'WhatsApp us on +1 (315) 262-0362.</p>' +\n\n    '<p style=\"font-size:14px;color:#444;line-height:1.65;margin:16px 0 0\">We hope to see you again soon.</p>' +\n    '<p style=\"font-size:14px;color:#1a1a2e;font-weight:600;margin:16px 0 0\">&mdash; The Casa Papelillo Team</p>' +\n",
+"    tx('Anything at all &mdash; a question, a lost sunhat, dates for next year &mdash; reply here or ' +\n       'WhatsApp us on ',\n       'Para lo que sea (una pregunta, un sombrero olvidado, fechas para el próximo año), responda a este correo o ' +\n       'escríbanos por WhatsApp al ') +\n    '<a href=\"https://casapapelillo.com/whatsapp\" style=\"color:#E8863A;white-space:nowrap\">+1 (315) 262-0362</a>.</p>' +\n\n    '<p style=\"font-size:14px;color:#444;line-height:1.65;margin:16px 0 0\">' + tx('We hope to see you again soon.', 'Esperamos verle de nuevo pronto.') + '</p>' +\n    '<p style=\"font-size:14px;color:#1a1a2e;font-weight:600;margin:16px 0 0\">&mdash; ' + tx('The Casa Papelillo Team', 'El equipo de Casa Papelillo') + '</p>' +\n"
+],
+[
+"color:#aaa;margin:0\">Casa Papelillo &middot; Chamela Bay &middot; Costa Careyes",
+"color:#aaa;margin:0\">Casa Papelillo &middot; ' + tx('Chamela Bay', 'Bahía de Chamela') + ' &middot; Costa Careyes"
+],
+[
+"  var plain = [\n    \"Dear \" + firstName + \",\",\n    \"\",\n    \"Thank you for spending your time with us at Casa Papelillo\" +\n      (guest.checkIn && guest.checkOut ? \" (\" + guest.checkIn + \" to \" + guest.checkOut + \")\" : \"\") +\n      \". It was a pleasure having you on Chamela Bay.\",\n    \"\",\n    \"Three small asks before you get back to real life:\",\n    \"\",\n    \"1. FIVE QUICK QUESTIONS - our guest feedback form takes about a minute. We read\",\n    \"   every answer, and it is how we decide what to fix, what to add, and how to\",\n    \"   look after the next guests better.\",\n    \"   \" + POST_STAY_FEEDBACK_FORM,\n    \"\",\n    \"2. LEAVE A GOOGLE REVIEW - we are a small, family-run house rather than a hotel\",\n    \"   chain, and every review helps other guests find us.\",\n    \"   \" + POST_STAY_REVIEW_URL,\n    \"\",\n    \"3. SEND US FRIENDS - for every guest you refer, they receive 10% off their stay\",\n    \"   and you receive 10% off your next booking. Just reply with their name, or\",\n    \"   ask them to mention you when they book.\",\n    \"\",\n    \"Anything at all, reply here or WhatsApp +1 (315) 262-0362.\",\n    \"\",\n    \"We hope to see you again soon.\",\n    \"\",\n    \"- The Casa Papelillo Team\",\n    \"Casa Papelillo, Chamela Bay, Costa Careyes, Jalisco, Mexico\"\n  ].join(NL);\n\n  GmailApp.sendEmail(\n    guest.email,\n    \"Thank you for staying at Casa Papelillo\",\n    plain,\n    {\n      bcc: PROPERTY_EMAIL + \", \" + INTERNAL_BCC,\n      replyTo: PROPERTY_EMAIL,\n      htmlBody: html,\n      name: \"Casa Papelillo\"\n    }\n  );\n}\n\n",
+"  var plain = es ? [\n    greeting,\n    \"\",\n    \"Gracias por pasar su tiempo con nosotros en Casa Papelillo\" +\n      (stayText ? \" (\" + stayText + \")\" : \"\") +\n      \". Fue un placer recibirle en Bahía de Chamela.\",\n    \"\",\n    \"Tres pequeñas peticiones antes de que regrese a su rutina:\",\n    \"\",\n    \"1. CINCO PREGUNTAS RÁPIDAS - nuestro formulario de comentarios toma alrededor de\",\n    \"   un minuto. Leemos cada respuesta, y así decidimos qué corregir, qué agregar y\",\n    \"   cómo atender mejor a los próximos huéspedes.\",\n    \"   \" + POST_STAY_FEEDBACK_FORM,\n    \"\",\n    \"2. DEJE UNA RESEÑA EN GOOGLE - somos una casa pequeña y familiar, no una cadena\",\n    \"   hotelera, y cada reseña ayuda a otros huéspedes a encontrarnos.\",\n    \"   \" + POST_STAY_REVIEW_URL,\n    \"\",\n    \"3. RECOMIÉNDENOS - por cada huésped que nos recomiende, ellos reciben 10% de\",\n    \"   descuento en su estancia y usted recibe 10% de descuento en su próxima\",\n    \"   reservación. Basta con responder con su nombre, o pídales que mencionen el\",\n    \"   suyo al reservar.\",\n    \"\",\n    \"Para lo que sea, responda a este correo o escríbanos por WhatsApp al +1 (315) 262-0362.\",\n    \"\",\n    \"Esperamos verle de nuevo pronto.\",\n    \"\",\n    \"- El equipo de Casa Papelillo\",\n    \"Casa Papelillo, Bahía de Chamela, Costa Careyes, Jalisco, México\"\n  ].join(NL) : [\n    \"Dear \" + firstName + \",\",\n    \"\",\n    \"Thank you for spending your time with us at Casa Papelillo\" +\n      (guest.checkIn && guest.checkOut ? \" (\" + guest.checkIn + \" to \" + guest.checkOut + \")\" : \"\") +\n      \". It was a pleasure having you on Chamela Bay.\",\n    \"\",\n    \"Three small asks before you get back to real life:\",\n    \"\",\n    \"1. FIVE QUICK QUESTIONS - our guest feedback form takes about a minute. We read\",\n    \"   every answer, and it is how we decide what to fix, what to add, and how to\",\n    \"   look after the next guests better.\",\n    \"   \" + POST_STAY_FEEDBACK_FORM,\n    \"\",\n    \"2. LEAVE A GOOGLE REVIEW - we are a small, family-run house rather than a hotel\",\n    \"   chain, and every review helps other guests find us.\",\n    \"   \" + POST_STAY_REVIEW_URL,\n    \"\",\n    \"3. SEND US FRIENDS - for every guest you refer, they receive 10% off their stay\",\n    \"   and you receive 10% off your next booking. Just reply with their name, or\",\n    \"   ask them to mention you when they book.\",\n    \"\",\n    \"Anything at all, reply here or WhatsApp +1 (315) 262-0362.\",\n    \"\",\n    \"We hope to see you again soon.\",\n    \"\",\n    \"- The Casa Papelillo Team\",\n    \"Casa Papelillo, Chamela Bay, Costa Careyes, Jalisco, Mexico\"\n  ].join(NL);\n\n  return {\n    subject: tx(\"Thank you for staying at Casa Papelillo\", \"Gracias por hospedarse en Casa Papelillo\"),\n    plain: plain,\n    html: html\n  };\n}\n"
+]
+]

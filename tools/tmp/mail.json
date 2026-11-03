@@ -1,0 +1,142 @@
+[
+[
+"function guestConfirmation_(data) {\n  const nb = data.nightBreakdown || {};",
+"function guestConfirmation_(data) {\n  // SPAN3: the booking's stored lang picks the wording. English and Spanish sit\n  // side by side in each tx() call; anything but \"es\" is English.\n  const es = bookingLang_(data.lang) === \"es\";\n  const tx = function (en, spanish) { return es ? spanish : en; };\n  const siteUrl = tx(CONF_SITE_URL, CONF_SITE_URL_ES);\n  const cancelUrl = tx(CONF_CANCEL_URL, CONF_CANCEL_URL_ES);\n  const eventsUrl = tx(CONF_EVENTS_URL, CONF_EVENTS_URL_ES);\n  const faqUrl = tx(CONF_FAQ_URL, CONF_FAQ_URL_ES);\n  const nightWord = function (n) { return es ? (n === 1 ? \" noche\" : \" noches\") : \" nights\"; };\n  const nb = data.nightBreakdown || {};"
+],
+[
+"var CONF_GUIDE_URL = \"\";",
+"var CONF_SITE_URL_ES = \"https://casapapelillo.com/es/\"; // SPAN3: Spanish pages, checked 3 Nov\nvar CONF_CANCEL_URL_ES = \"https://casapapelillo.com/es/terminos-y-condiciones/#cancellation\";\nvar CONF_EVENTS_URL_ES = \"https://casapapelillo.com/es/eventos/\";\nvar CONF_FAQ_URL_ES = \"https://casapapelillo.com/es/preguntas-frecuentes/\";\nvar CONF_GUIDE_URL = \"\";"
+],
+[
+"var CONF_HELP_TITLE = \"Here to Help\"; // MAIL27: heading of the last section\n",
+"var CONF_HELP_TITLE = \"Here to Help\"; // MAIL27: heading of the last section\nvar CONF_HELP_TITLE_ES = \"Estamos para ayudarle\";\n"
+],
+[
+"const petsText = petCount > 0 ? String(petCount) : \"None\";",
+"const petsText = petCount > 0 ? String(petCount) : tx(\"None\", \"Ninguna\");"
+],
+[
+"  const inDate = prettyDate_(data.checkIn);\n  const outDate = prettyDate_(data.checkOut);\n",
+"  const inDate = es ? prettyDateEs_(data.checkIn) : prettyDate_(data.checkIn);\n  const outDate = es ? prettyDateEs_(data.checkOut) : prettyDate_(data.checkOut);\n"
+],
+[
+"let namesBy = \"as soon as possible\";",
+"let namesBy = tx(\"as soon as possible\", \"lo antes posible\");"
+],
+[
+"namesBy = \"by \" + prettyDate_(formatIsoDate(due));",
+"namesBy = es ? \"a más tardar el \" + prettyDateEs_(formatIsoDate(due)) : \"by \" + prettyDate_(formatIsoDate(due));"
+],
+[
+"  if (highNights > 0) accom += row(\"season\", \"High Season\", highNights + \" nights × $\" + formatMoney(rateHigh));\n  if (midNights > 0) accom += row(\"season\", \"Mid Season\", midNights + \" nights × $\" + formatMoney(rateMid));\n  if (lowNights > 0) accom += row(\"season\", \"Low Season\", lowNights + \" nights × $\" + formatMoney(rateLow));\n",
+"  if (highNights > 0) accom += row(\"season\", tx(\"High Season\", \"Temporada alta\"), highNights + nightWord(highNights) + \" × $\" + formatMoney(rateHigh));\n  if (midNights > 0) accom += row(\"season\", tx(\"Mid Season\", \"Temporada media\"), midNights + nightWord(midNights) + \" × $\" + formatMoney(rateMid));\n  if (lowNights > 0) accom += row(\"season\", tx(\"Low Season\", \"Temporada baja\"), lowNights + nightWord(lowNights) + \" × $\" + formatMoney(rateLow));\n"
+],
+[
+"      const label = escapeHtml(t.name || \"Private transfer\") + (q > 1 ? \" ×\" + q : \"\");\n      trS += row(\"transport\", label, \"$\" + formatMoney(price * q));\n      trText += \"\\n\" + (t.name || \"Private transfer\") + (q > 1 ? \" x\" + q : \"\") + \": $\" + formatMoney(price * q);\n",
+"      const tName = stripeTransportText_(t.id, \"name\", t.name || tx(\"Private transfer\", \"Traslado privado\"), es ? \"es\" : \"en\");\n      const label = escapeHtml(tName) + (q > 1 ? \" ×\" + q : \"\");\n      trS += row(\"transport\", label, \"$\" + formatMoney(price * q));\n      trText += \"\\n\" + tName + (q > 1 ? \" x\" + q : \"\") + \": $\" + formatMoney(price * q);\n"
+],
+[
+"  const petLabel = petCount > 0 && nightsN > 0\n    ? \"Pet fee (\" + petCount + \" × \" + nightsN + \" nights)\"\n    : \"Pet fee\";\n",
+"  const petLabel = petCount > 0 && nightsN > 0\n    ? tx(\"Pet fee (\", \"Cargo por mascotas (\") + petCount + \" × \" + nightsN + nightWord(nightsN) + \")\"\n    : tx(\"Pet fee\", \"Cargo por mascotas\");\n"
+],
+[
+"  const policyValue = (isHighPolicy ? \"High season\" : \"Low / Mid-season\") + \". See §5 of your agreement\";\n  const policyText = \"Cancellation policy: \" + (isHighPolicy ? \"High season\" : \"Low / Mid-season\") +\n    \". See Section 5 of your agreement (\" + CONF_CANCEL_URL + \").\";\n",
+"  const policyName = es\n    ? (isHighPolicy ? \"Temporada alta\" : \"Temporada baja / media\")\n    : (isHighPolicy ? \"High season\" : \"Low / Mid-season\");\n  const policyValue = policyName + tx(\". See §5 of your agreement\", \". Vea la §5 de su contrato\");\n  const policyText = tx(\"Cancellation policy: \", \"Política de cancelación: \") + policyName +\n    tx(\". See Section 5 of your agreement (\", \". Vea la Sección 5 de su contrato (\") + cancelUrl + \").\";\n"
+],
+[
+"<a href=\"' + CONF_SITE_URL + '\" style=\"text-decoration:none;color:#fff\">",
+"<a href=\"' + siteUrl + '\" style=\"text-decoration:none;color:#fff\">"
+],
+[
+"font-size:16px\">Booking Confirmation</p>' +",
+"font-size:16px\">' + tx(\"Booking Confirmation\", \"Confirmación de reservación\") + \"</p>\" +"
+],
+[
+"<p style=\"font-size:16px;margin:0 0 16px\">Dear ' + escapeHtml(data.name) + \",</p>\" +",
+"<p style=\"font-size:16px;margin:0 0 16px\">' + tx(\"Dear \", \"Hola, \") + escapeHtml(data.name) + tx(\",\", \":\") + \"</p>\" +"
+],
+[
+"margin:0 0 24px\">We\\'re delighted to confirm your reservation at Casa Papelillo.</p>' +",
+"margin:0 0 24px\">' + tx(\"We're delighted to confirm your reservation at Casa Papelillo.\", \"Nos da mucho gusto confirmar su reservación en Casa Papelillo.\") + \"</p>\" +"
+],
+[
+"h2(\"Your Reservation\") +",
+"h2(tx(\"Your Reservation\", \"Su reservación\")) +"
+],
+[
+"escapeHtml(inDate) + '<br><span style=\"font-weight:400;color:#444\">from 3:00 PM</span>', \";font-weight:600\") +",
+"escapeHtml(inDate) + '<br><span style=\"font-weight:400;color:#444\">' + tx(\"from 3:00 PM\", \"a partir de las 3:00 p. m.\") + \"</span>\", \";font-weight:600\") +"
+],
+[
+"escapeHtml(outDate) + '<br><span style=\"font-weight:400;color:#444\">by 11:00 AM</span>', \";font-weight:600\") +",
+"escapeHtml(outDate) + '<br><span style=\"font-weight:400;color:#444\">' + tx(\"by 11:00 AM\", \"a más tardar a las 11:00 a. m.\") + \"</span>\", \";font-weight:600\") +"
+],
+[
+"    row(\"nights\", \"Nights\", escapeHtml(data.nights)) +\n    row(\"guests\", \"Guests\", escapeHtml(data.guests)) +\n    row(\"pets\", \"Pets\", escapeHtml(petsText)) +\n",
+"    row(\"nights\", tx(\"Nights\", \"Noches\"), escapeHtml(data.nights)) +\n    row(\"guests\", tx(\"Guests\", \"Huéspedes\"), escapeHtml(data.guests)) +\n    row(\"pets\", tx(\"Pets\", \"Mascotas\"), escapeHtml(petsText)) +\n"
+],
+[
+"row(\"cancel\", '<a href=\"' + CONF_CANCEL_URL + '\" style=\"color:#E8863A;white-space:nowrap\">Cancellation policy</a>', escapeHtml(policyValue)) +",
+"row(\"cancel\", '<a href=\"' + cancelUrl + '\" style=\"color:#E8863A;white-space:nowrap\">' + tx(\"Cancellation policy\", \"Política de cancelación\") + \"</a>\", escapeHtml(policyValue)) +"
+],
+[
+"font-size:16px;vertical-align:middle\">Total Paid</td>' +",
+"font-size:16px;vertical-align:middle\">' + tx(\"Total Paid\", \"Total pagado\") + \"</td>\" +"
+],
+[
+"margin:4px 0 0;text-align:right\">Rates include a 5% service fee.</p>' +",
+"margin:4px 0 0;text-align:right\">' + tx(\"Rates include a 5% service fee.\", \"Las tarifas incluyen un cargo por servicio del 5%.\") + \"</p>\" +"
+],
+[
+"    h2(\"Before You Arrive\") +",
+"    h2(tx(\"Before You Arrive\", \"Antes de su llegada\")) +"
+],
+[
+"    step(\"guestlist\", \"1. Send us your guest list \" + escapeHtml(namesBy) + \".\",\n       \"We need the full name of every guest at least \" + GUEST_NAMES_DAYS_BEFORE + \" days before arrival. The community's 24/7 security admits guests from that list only.\") +\n    step(\"id\", \"2. Bring photo ID.\", \"A government-issued photo ID is required on arrival.\") +\n    step(\"celebrate\", '3. <a href=\"' + CONF_EVENTS_URL + '\" style=\"color:#E8863A\">Planning a celebration?</a>',\n       \"Celebrations for registered guests are welcome. Other guests and vendors need our prior written approval: just reply to this email.\") +\n    step(\"butler\", \"4. Meet your butler.\", \"Casa Papelillo's butler will reach out before your arrival to help coordinate your stay.\", true) +\n",
+"    step(\"guestlist\", tx(\"1. Send us your guest list \", \"1. Envíenos su lista de huéspedes \") + escapeHtml(namesBy) + \".\",\n       tx(\"We need the full name of every guest at least \" + GUEST_NAMES_DAYS_BEFORE + \" days before arrival. The community's 24/7 security admits guests from that list only.\",\n          \"Necesitamos el nombre completo de cada huésped al menos \" + GUEST_NAMES_DAYS_BEFORE + \" días antes de la llegada. La seguridad de la comunidad, activa las 24 horas, solo admite a las personas incluidas en esa lista.\")) +\n    step(\"id\", tx(\"2. Bring photo ID.\", \"2. Traiga una identificación con fotografía.\"), tx(\"A government-issued photo ID is required on arrival.\", \"Se requiere una identificación oficial con fotografía al llegar.\")) +\n    step(\"celebrate\", '3. <a href=\"' + eventsUrl + '\" style=\"color:#E8863A\">' + tx(\"Planning a celebration?\", \"¿Planea una celebración?\") + \"</a>\",\n       tx(\"Celebrations for registered guests are welcome. Other guests and vendors need our prior written approval: just reply to this email.\",\n          \"Las celebraciones de los huéspedes registrados son bienvenidas. Otros invitados y proveedores requieren nuestra aprobación previa por escrito: basta con responder a este correo.\")) +\n    step(\"butler\", tx(\"4. Meet your butler.\", \"4. Conozca a su mayordomo.\"), tx(\"Casa Papelillo's butler will reach out before your arrival to help coordinate your stay.\", \"El mayordomo de Casa Papelillo se comunicará con usted antes de su llegada para ayudarle a coordinar su estancia.\"), true) +\n"
+],
+[
+"    h2(\"Enhance Your Stay\") +",
+"    h2(tx(\"Enhance Your Stay\", \"Complemente su estancia\")) +"
+],
+[
+"    xp(\"yoga\", \"Yoga\") + xp(\"sound\", \"Sound healing\") + xp(\"massage\", \"Massage\") +\n    \"</tr><tr>\" +\n    xp(\"boat\", \"Boat trips\") + xp(\"horse\", \"Horseback\") + xp(\"beauty\", \"Beauty\") +\n",
+"    xp(\"yoga\", \"Yoga\") + xp(\"sound\", tx(\"Sound healing\", \"Sanación con sonido\")) + xp(\"massage\", tx(\"Massage\", \"Masajes\")) +\n    \"</tr><tr>\" +\n    xp(\"boat\", tx(\"Boat trips\", \"Paseos en lancha\")) + xp(\"horse\", tx(\"Horseback\", \"Paseos a caballo\")) + xp(\"beauty\", tx(\"Beauty\", \"Belleza\")) +\n"
+],
+[
+"margin:0 0 16px\">We offer a curated selection of private experiences, from yoga, sound healing and massages to boat excursions, horseback riding and beauty services.</p>' +",
+"margin:0 0 16px\">' + tx(\"We offer a curated selection of private experiences, from yoga, sound healing and massages to boat excursions, horseback riding and beauty services.\", \"Ofrecemos una selección de experiencias privadas: desde yoga, sanación con sonido y masajes hasta paseos en lancha, paseos a caballo y servicios de belleza.\") + \"</p>\" +"
+],
+[
+"font-size:16px;font-weight:700\">Browse Experiences →</a>' +",
+"font-size:16px;font-weight:700\">' + tx(\"Browse Experiences →\", \"Ver experiencias →\") + \"</a>\" +"
+],
+[
+"margin:12px 0 0\">Feel free to reply to this email with any requests.</p></div>' +",
+"margin:12px 0 0\">' + tx(\"Feel free to reply to this email with any requests.\", \"Con gusto atendemos cualquier solicitud: basta con responder a este correo.\") + \"</p></div>\" +"
+],
+[
+"    h2(CONF_HELP_TITLE) +",
+"    h2(tx(CONF_HELP_TITLE, CONF_HELP_TITLE_ES)) +"
+],
+[
+"    step(\"guide\", (CONF_GUIDE_URL ? '<a href=\"' + CONF_GUIDE_URL + '\" style=\"color:#E8863A\">Your Welcome Guide</a>' : \"Your Welcome Guide\"),\n       (CONF_GUIDE_URL ? \"is one click away\" : \"will follow before your arrival\") + \", and your Rental Agreement is attached.\") +\n    step(\"questions\", '<a href=\"' + CONF_FAQ_URL + '\" style=\"color:#444;text-decoration:none\">Questions?</a>', // MAIL27b: looks like text\n       'Email us: <a href=\"mailto:info@casapapelillo.com\" style=\"color:#E8863A\">info@casapapelillo.com</a> or WhatsApp: ' +\n",
+"    step(\"guide\", (CONF_GUIDE_URL ? '<a href=\"' + CONF_GUIDE_URL + '\" style=\"color:#E8863A\">' + tx(\"Your Welcome Guide\", \"Su Guía de Bienvenida\") + \"</a>\" : tx(\"Your Welcome Guide\", \"Su Guía de Bienvenida\")),\n       tx((CONF_GUIDE_URL ? \"is one click away\" : \"will follow before your arrival\") + \", and your Rental Agreement is attached.\",\n          (CONF_GUIDE_URL ? \"está a un clic\" : \"se enviará antes de su llegada\") + \", y su Contrato de Arrendamiento va adjunto.\")) +\n    step(\"questions\", '<a href=\"' + faqUrl + '\" style=\"color:#444;text-decoration:none\">' + tx(\"Questions?\", \"¿Tiene preguntas?\") + \"</a>\", // MAIL27b: looks like text\n       tx(\"Email us: \", \"Escríbanos a: \") + '<a href=\"mailto:info@casapapelillo.com\" style=\"color:#E8863A\">info@casapapelillo.com</a>' + tx(\" or WhatsApp: \", \" o por WhatsApp: \") +\n"
+],
+[
+"font-weight:700;margin:24px 0 0;text-align:center\">The Casa Papelillo Team</p></div>' +",
+"font-weight:700;margin:24px 0 0;text-align:center\">' + tx(\"The Casa Papelillo Team\", \"El equipo de Casa Papelillo\") + \"</p></div>\" +"
+],
+[
+"<a href=\"' + CONF_SITE_URL + '\" style=\"color:#888;text-decoration:none\">Casa Papelillo</a> · Chamela Bay · Costalegre · Jalisco, México</p></div></div>';",
+"<a href=\"' + siteUrl + '\" style=\"color:#888;text-decoration:none\">Casa Papelillo</a> · ' + tx(\"Chamela Bay\", \"Bahía de Chamela\") + \" · Costalegre · Jalisco, México</p></div></div>\";"
+],
+[
+"  const text =\n    \"Dear \" + data.name + \",\\n\\n\" +\n    \"We're delighted to confirm your reservation at Casa Papelillo.\\n\\n\" +\n    \"Check-in: \" + inDate + \", from 3:00 PM\\n\" +\n    \"Check-out: \" + outDate + \", by 11:00 AM\\n\" +\n    \"Nights: \" + data.nights + \"\\n\" +\n    \"Guests: \" + data.guests + \"\\n\" +\n    \"Pets: \" + petsText +\n    trText +\n    (petFee > 0 ? \"\\n\" + petLabel + \": $\" + formatMoney(petFee) : \"\") +\n    \"\\nTotal paid: $\" + formatMoney(data.grandTotal) + \" USD (rates include a 5% service fee)\\n\\n\" +\n    policyText + \"\\n\\n\" +\n    \"Before you arrive:\\n\" +\n    \"1. Send us your guest list \" + namesBy + \": the full name of every guest, at least \" + GUEST_NAMES_DAYS_BEFORE + \" days before arrival. The community's 24/7 security admits guests from that list only.\\n\" +\n    \"2. Bring photo ID. A government-issued photo ID is required on arrival.\\n\" +\n    \"3. Planning a celebration? (\" + CONF_EVENTS_URL + \") Celebrations for registered guests are welcome. Other guests and vendors need our prior written approval: just reply to this email.\\n\" +\n    \"4. Meet your butler. Casa Papelillo's butler will reach out before your arrival to help coordinate your stay.\\n\\n\" +\n    \"Browse experiences: \" + EXPERIENCE_FORM + \"\\n\\n\" +\n    \"Your Welcome Guide\" + (CONF_GUIDE_URL ? \" (\" + CONF_GUIDE_URL + \") is one click away\" : \" will follow before your arrival\") + \", and your Rental Agreement is attached.\\n\" +\n    \"Questions? (\" + CONF_FAQ_URL + \")\\nEmail us: info@casapapelillo.com or WhatsApp: +1 (315) 262-0362\\n\\n\" +\n    \"The Casa Papelillo Team\\n\\n\" +\n    \"Casa Papelillo (\" + CONF_SITE_URL + \") · Chamela Bay · Costalegre · Jalisco, México\";\n\n  return {\n    subject: \"Your Reservation at Casa Papelillo — \" + inDate + \" to \" + outDate,\n    text: text,\n    html: html\n  };\n}\n\n",
+"  const text = es\n    ? \"Hola, \" + data.name + \":\\n\\n\" +\n      \"Nos da mucho gusto confirmar su reservación en Casa Papelillo.\\n\\n\" +\n      \"Check-in: \" + inDate + \", a partir de las 3:00 p. m.\\n\" +\n      \"Check-out: \" + outDate + \", a más tardar a las 11:00 a. m.\\n\" +\n      \"Noches: \" + data.nights + \"\\n\" +\n      \"Huéspedes: \" + data.guests + \"\\n\" +\n      \"Mascotas: \" + petsText +\n      trText +\n      (petFee > 0 ? \"\\n\" + petLabel + \": $\" + formatMoney(petFee) : \"\") +\n      \"\\nTotal pagado: $\" + formatMoney(data.grandTotal) + \" USD (las tarifas incluyen un cargo por servicio del 5%)\\n\\n\" +\n      policyText + \"\\n\\n\" +\n      \"Antes de su llegada:\\n\" +\n      \"1. Envíenos su lista de huéspedes \" + namesBy + \": el nombre completo de cada huésped, al menos \" + GUEST_NAMES_DAYS_BEFORE + \" días antes de la llegada. La seguridad de la comunidad, activa las 24 horas, solo admite a las personas incluidas en esa lista.\\n\" +\n      \"2. Traiga una identificación con fotografía. Se requiere una identificación oficial con fotografía al llegar.\\n\" +\n      \"3. ¿Planea una celebración? (\" + eventsUrl + \") Las celebraciones de los huéspedes registrados son bienvenidas. Otros invitados y proveedores requieren nuestra aprobación previa por escrito: basta con responder a este correo.\\n\" +\n      \"4. Conozca a su mayordomo. El mayordomo de Casa Papelillo se comunicará con usted antes de su llegada para ayudarle a coordinar su estancia.\\n\\n\" +\n      \"Ver experiencias: \" + EXPERIENCE_FORM + \"\\n\\n\" +\n      \"Su Guía de Bienvenida\" + (CONF_GUIDE_URL ? \" (\" + CONF_GUIDE_URL + \") está a un clic\" : \" se enviará antes de su llegada\") + \", y su Contrato de Arrendamiento va adjunto.\\n\" +\n      \"¿Tiene preguntas? (\" + faqUrl + \")\\nEscríbanos a: info@casapapelillo.com o por WhatsApp: +1 (315) 262-0362\\n\\n\" +\n      \"El equipo de Casa Papelillo\\n\\n\" +\n      \"Casa Papelillo (\" + siteUrl + \") · Bahía de Chamela · Costalegre · Jalisco, México\"\n    : \"Dear \" + data.name + \",\\n\\n\" +\n    \"We're delighted to confirm your reservation at Casa Papelillo.\\n\\n\" +\n    \"Check-in: \" + inDate + \", from 3:00 PM\\n\" +\n    \"Check-out: \" + outDate + \", by 11:00 AM\\n\" +\n    \"Nights: \" + data.nights + \"\\n\" +\n    \"Guests: \" + data.guests + \"\\n\" +\n    \"Pets: \" + petsText +\n    trText +\n    (petFee > 0 ? \"\\n\" + petLabel + \": $\" + formatMoney(petFee) : \"\") +\n    \"\\nTotal paid: $\" + formatMoney(data.grandTotal) + \" USD (rates include a 5% service fee)\\n\\n\" +\n    policyText + \"\\n\\n\" +\n    \"Before you arrive:\\n\" +\n    \"1. Send us your guest list \" + namesBy + \": the full name of every guest, at least \" + GUEST_NAMES_DAYS_BEFORE + \" days before arrival. The community's 24/7 security admits guests from that list only.\\n\" +\n    \"2. Bring photo ID. A government-issued photo ID is required on arrival.\\n\" +\n    \"3. Planning a celebration? (\" + CONF_EVENTS_URL + \") Celebrations for registered guests are welcome. Other guests and vendors need our prior written approval: just reply to this email.\\n\" +\n    \"4. Meet your butler. Casa Papelillo's butler will reach out before your arrival to help coordinate your stay.\\n\\n\" +\n    \"Browse experiences: \" + EXPERIENCE_FORM + \"\\n\\n\" +\n    \"Your Welcome Guide\" + (CONF_GUIDE_URL ? \" (\" + CONF_GUIDE_URL + \") is one click away\" : \" will follow before your arrival\") + \", and your Rental Agreement is attached.\\n\" +\n    \"Questions? (\" + CONF_FAQ_URL + \")\\nEmail us: info@casapapelillo.com or WhatsApp: +1 (315) 262-0362\\n\\n\" +\n    \"The Casa Papelillo Team\\n\\n\" +\n    \"Casa Papelillo (\" + CONF_SITE_URL + \") · Chamela Bay · Costalegre · Jalisco, México\";\n\n  return {\n    subject: es\n      ? \"Su reservación en Casa Papelillo — del \" + inDate + \" al \" + outDate\n      : \"Your Reservation at Casa Papelillo — \" + inDate + \" to \" + outDate,\n    text: text,\n    html: html\n  };\n}\n\n"
+],
+[
+"function welcomeGuideAttachments_() {",
+"/* SPAN3 TEST: the Spanish guest confirmation, holding note and post-stay email\n   for a made-up booking, to info@casapapelillo.com ONLY (no cc, no bcc, never a\n   guest). The test agreement PDF is attached, then binned. Touches no ledger,\n   no Stripe, no Script Properties. */\nfunction testSpanishEmailsSPAN3() {\n  const data = {\n    name: \"PRUEBA Huésped\", email: PROPERTY_EMAIL, phone: \"+1 555 0100\",\n    guests: \"6\", pets: \"1\", petRate: 100, petTotal: 500,\n    checkIn: \"2026-12-17\", checkOut: \"2026-12-22\", nights: \"5\",\n    nightBreakdown: { high: 2, mid: 3, low: 0 },\n    rateHigh: 3200, rateMid: 2300, rateLow: 1400,\n    rentalTotal: 13300,\n    transport: [{ id: \"suburban_zlo\", name: \"Manzanillo Airport — Suburban\", price: \"250\", qty: \"2\" }],\n    grandTotal: 14300, lang: \"es\",\n    acceptedAt: \"TEST\", bookingRef: \"TEST-SPAN3\"\n  };\n  const msg = guestConfirmation_(data);\n  GmailApp.sendEmail(PROPERTY_EMAIL, \"[TEST SPAN3] \" + msg.subject, msg.text, {\n    attachments: guestEmailAttachments_(data),\n    htmlBody: msg.html,\n    name: \"Casa Papelillo\"\n  });\n  try {\n    const folder = DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty(\"AGREEMENT_FOLDER_ID\"));\n    const it = folder.getFilesByName(\"Rental Agreement - \" + data.name + \" - \" + data.checkIn + \".pdf\");\n    while (it.hasNext()) it.next().setTrashed(true);\n  } catch (err) {\n    Logger.log(\"TEST PDF clean-up skipped: \" + err.message);\n  }\n  const note = holdingNote_(data);\n  GmailApp.sendEmail(PROPERTY_EMAIL, \"[TEST SPAN3] \" + note.subject, note.body, { name: note.from });\n  const post = postStayMessage_({\n    name: data.name, email: PROPERTY_EMAIL, checkIn: data.checkIn, checkOut: data.checkOut,\n    nights: 5, bookingId: \"TEST-SPAN3\", lang: \"es\"\n  });\n  GmailApp.sendEmail(PROPERTY_EMAIL, \"[TEST SPAN3] \" + post.subject, post.plain, { htmlBody: post.html, name: \"Casa Papelillo\" });\n  Logger.log(\"SPAN3 TEST: 3 Spanish emails sent to \" + PROPERTY_EMAIL);\n}\n\nfunction welcomeGuideAttachments_() {"
+]
+]

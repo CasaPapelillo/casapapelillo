@@ -41,7 +41,7 @@ h1 span{color:#E8863A;font-style:italic}.hd{display:flex;align-items:center;gap:
 .sl2{font-size:16px;line-height:1.5;color:#5a4f48}.sl2 b{color:#2a2320;font-weight:700}.nw{white-space:nowrap}
 .pb{background:#fafaf8;border:1px solid #eee;border-radius:6px;padding:16px;margin-bottom:16px}
 .pr{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
-.pk{font-size:13px;color:#888}.pv{font-size:14px;font-weight:500}
+.pk{font-size:13px;color:#888}.pv{font-size:14px;font-weight:500;text-align:right}
 .pv.t{color:#E8863A;font-size:18px;font-weight:700;font-family:'DM Serif Display',Georgia,serif}
 .stag{font-size:10px;color:#E8863A;font-weight:600;margin-top:4px;text-transform:uppercase;letter-spacing:1.5px}
 .hint{font-size:12px;color:#aaa;font-style:italic;margin-top:4px}
@@ -72,7 +72,7 @@ textarea{min-height:80px;resize:vertical}
 .sbox{background:#fafaf8;border:1px solid #eee;border-radius:6px;padding:20px;margin-bottom:16px}
 .slbl{font-size:10px;font-weight:700;letter-spacing:2.5px;color:#E8863A;margin-bottom:12px;text-transform:uppercase}
 .sr{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0ece5}
-.sk{font-size:13px;color:#888}.sv{font-size:14px;font-weight:500}
+.sk{font-size:13px;color:#888}.sv{font-size:14px;font-weight:500;text-align:right}
 .sr.tot{border-top:2px solid #E8863A;padding-top:12px;margin-top:8px;border-bottom:none}
 .sr.tot .sk{color:#1a1a2e;font-weight:700;font-size:15px}
 .sr.tot .sv{color:#E8863A;font-size:22px;font-weight:700;font-family:'DM Serif Display',Georgia,serif}
@@ -94,7 +94,7 @@ textarea{min-height:80px;resize:vertical}
 .agree a{color:#E8863A}
 .agree .req{color:#c25050;font-weight:700}
 @media(max-width:480px){.logo{width:40px;height:40px}.hd{gap:10px}}@media(max-width:400px){h1{font-size:26px}}@media(max-width:480px){.wrap{padding:24px 16px 96px}.steps{gap:10px}.stxt{font-size:11px}.cal-box{padding:14px 10px}.cd{min-height:50px;padding:6px 1px}.cp .f{display:none}.cp .s{display:inline}.sb{letter-spacing:1px}}
-@media (pointer:coarse){.wrap{padding-bottom:220px}}
+@media (pointer:coarse){.wrap{padding-bottom:220px}body.cp-fixed .wrap{padding-bottom:40px}body.cp-fixed .cd{min-height:44px}body.cp-fixed.cp-later .sub,body.cp-fixed.cp-later .note{display:none}.cd{touch-action:manipulation}}
 </style>
 </head>
 <body>
@@ -105,7 +105,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-11-03d";
+var WIDGET_BUILD="2026-11-03e";
 (function(){
   if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
@@ -871,6 +871,19 @@ if(PREFETCH){
 }
 loadBookingData();
 
+/* Swipe guard (SPAN3). A swipe that starts on the calendar must never pick a date.
+   If the finger moved, drop the click the phone sends at the end of the swipe. */
+(function(){
+  var x=0,y=0,moved=false,last=0;
+  document.addEventListener("touchstart",function(e){var t=e.touches[0];x=t.clientX;y=t.clientY;moved=false},{passive:true,capture:true});
+  document.addEventListener("touchmove",function(e){var t=e.touches[0];if(Math.abs(t.clientX-x)>10||Math.abs(t.clientY-y)>10){moved=true;last=Date.now()}},{passive:true,capture:true});
+  document.addEventListener("touchend",function(){if(moved)last=Date.now()},{passive:true,capture:true});
+  document.addEventListener("click",function(e){
+    var c=e.target&&e.target.closest&&e.target.closest(".cd");
+    if(c&&moved&&Date.now()-last<400){e.preventDefault();e.stopPropagation()}
+  },true);
+})();
+
 /* Frame height (R20). When the widget sits in an iframe, tell the host page its real
    content height after every change ("cp-widget:height"), and say when the step
    changes ("cp-widget:step") so the host can bring the top of the widget into view.
@@ -884,9 +897,23 @@ loadBookingData();
     var a=document.getElementById("app");
     return a?Math.ceil(a.getBoundingClientRect().bottom+(window.pageYOffset||0)):0;
   }
+  /* Fixed frame (SPAN3). The page may hold the frame at a set height and ignore the
+     height message. A taller widget then scrolls inside its frame, swipes bounce and
+     date taps make it jump. If the frame stays away from the height sent, use the
+     shorter touch layout so the content fits and swipes reach the page. Once only. */
+  var fixed=false,fixTimer=0;
+  function checkFixed(){
+    var ih=window.innerHeight||0;
+    if(fixed||!lastH||ih<1000||Math.abs(ih-lastH)<=40)return;
+    fixed=true;
+    document.body.classList.add("cp-fixed");
+    lastH=0;queue();
+  }
   function send(){
     queued=false;
+    document.body.classList.toggle("cp-later",S.step>0);
     var h=measure();
+    clearTimeout(fixTimer);fixTimer=setTimeout(checkFixed,900);
     if(h>0&&Math.abs(h-lastH)>1){
       lastH=h;
       try{

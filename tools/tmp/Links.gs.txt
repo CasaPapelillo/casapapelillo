@@ -109,8 +109,13 @@ function handleLinkRow_(row, tz) {
   if (!reply.success) return { status: "Error", warn: reply.message };
   return {
     status: "Link ready", warn: plan.warn || "", url: reply.url, session: reply.sessionId,
-    expires: Utilities.formatDate(new Date(Date.now() + PAYMENT_LINK_LIFE_DAYS * 86400000), PROPERTY_TIME_ZONE, "yyyy-MM-dd HH:mm")
+    expires: linkExpiryText_(plan)
   };
+}
+
+function linkExpiryText_(plan) {
+  var end = Utilities.formatDate(new Date(Date.now() + PAYMENT_LINK_LIFE_DAYS * 86400000), PROPERTY_TIME_ZONE, "yyyy-MM-dd");
+  return plan.flow === "booking" && plan.checkIn && plan.checkIn < end ? plan.checkIn : end;
 }
 
 function planLinkRow_(row, tz) {
@@ -212,9 +217,7 @@ function linkReceiptName_(name, plan, lang, guest) {
 // What the guest reads on Stripe's page, so the link is plainly theirs.
 function linkItemDesc_(plan, lang, guest, shown) {
   var es = lang === "es";
-  var parts = [(es ? "Para " : "For ") + guest];
-  var stay = linkStayText_(plan, lang);
-  if (stay) parts.push(stay);
+  var parts = [];
   if (plan.nights) {
     var nightly = plan.amount / plan.nights;
     parts.push(plan.nights + (es ? (plan.nights === 1 ? " noche" : " noches") : (plan.nights === 1 ? " night" : " nights")) +
@@ -222,6 +225,7 @@ function linkItemDesc_(plan, lang, guest, shown) {
   }
   if (plan.guests) parts.push(plan.guests + (es ? (plan.guests === 1 ? " huésped" : " huéspedes") : (plan.guests === 1 ? " guest" : " guests")));
   if (shown) parts.push(shown);
+  if (!parts.length) parts.push((es ? "Para " : "For ") + guest);
   return parts.join(" · ");
 }
 
@@ -273,11 +277,13 @@ function paymentLinkUrl_(url, email, lang) {
   return url + (q.length ? "?" + q.join("&") : "");
 }
 
-// An unpaid link closes after 30 days, or as soon as its stay's dates are taken.
+// An unpaid link closes after 30 days, on its check-in day, or as soon as its dates are taken.
 function closePaymentLinkIfDue_(linkId, data, stripeSecret) {
   var age = Date.now() - new Date(data.createdAt).getTime();
   var taken = data.linkFlow === "booking" ? linkDatesTaken_(data) : "";
-  if (age <= PAYMENT_LINK_LIFE_DAYS * 86400000 && !taken) return false;
+  var today = Utilities.formatDate(new Date(), PROPERTY_TIME_ZONE, "yyyy-MM-dd");
+  var pastArrival = data.linkFlow === "booking" && data.checkIn && today >= data.checkIn;
+  if (age <= PAYMENT_LINK_LIFE_DAYS * 86400000 && !taken && !pastArrival) return false;
   var resp = UrlFetchApp.fetch("https://api.stripe.com/v1/payment_links/" + linkId, {
     method: "post", headers: { Authorization: "Bearer " + stripeSecret },
     payload: { active: "false" }, muteHttpExceptions: true

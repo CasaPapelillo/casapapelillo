@@ -105,7 +105,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-11-03a";
+var WIDGET_BUILD="2026-11-03b";
 (function(){
   if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
@@ -213,10 +213,10 @@ var MS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 var NB=" ";
 function minStayLine(){
   var nt=function(k){return k+NB+"night"+(k===1?"":"s")};
-  var ln=function(t){return '<a class="qa" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener">'+t+'</a>'};
+  var ln=function(t){return '<a class="qa nw" href="https://casapapelillo.com/#rates" target="_blank" rel="noopener">'+t+'</a>'};
   var hi=ln('<b class="t-hi">High</b>: '+nt(MIN_H)),md='<b class="t-md">Mid</b>',lo='<b class="t-lo">Low</b>';
-  var rest=!MID_SEASON.length?ln(lo+": "+nt(MIN_L)):(MIN_M===MIN_L?ln(md+"/"+lo+": "+nt(MIN_L)):ln(md+": "+nt(MIN_M))+"; "+ln(lo+": "+nt(MIN_L)));
-  return "Seasonal minimum stays: "+hi+"; "+rest+".";
+  var rest=!MID_SEASON.length?ln(lo+": "+nt(MIN_L)):(MIN_M===MIN_L?ln(md+"/"+lo+": "+nt(MIN_L)):ln(md+": "+nt(MIN_M))+" · "+ln(lo+": "+nt(MIN_L)));
+  return "Seasonal minimum stays:<br>"+hi+" · "+rest;
 }
 function tierRate(t){return t==="high"?RATE_H:(t==="mid"?RATE_M:RATE_L)}
 function priceTag(t){var r=tierRate(t);return'<span class="cp"><span class="f">'+f$(r)+'</span><span class="s">$'+(Math.round(r/100)/10)+'k</span></span>'}

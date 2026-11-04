@@ -232,20 +232,24 @@ function linkItemDesc_(plan, lang, guest, shown) {
 function linkGuestLine_(plan, lang, guest) {
   var es = lang === "es";
   var stay = linkStayText_(plan, lang);
+  var who = String(guest).replace(/[\[\]()]/g, ""); // the line is Markdown; a name must not make a link
+  var mail = "[info@casapapelillo.com](mailto:info@casapapelillo.com)";
+  var wa = "[WhatsApp +1 (315) 262-0362](https://casapapelillo.com/whatsapp)";
   return es
-    ? "Preparado por Casa Papelillo para " + guest + (stay ? ", " + stay : "") + ". ¿Tiene preguntas? info@casapapelillo.com o WhatsApp +1 (315) 262-0362."
-    : "Prepared by Casa Papelillo for " + guest + (stay ? ", " + stay : "") + ". Questions? info@casapapelillo.com or WhatsApp +1 (315) 262-0362.";
+    ? "Preparado por [Casa Papelillo](https://casapapelillo.com/es/) para " + who + (stay ? ", " + stay : "") + ". ¿Tiene preguntas? " + mail + " o " + wa + "."
+    : "Prepared by [Casa Papelillo](https://casapapelillo.com/) for " + who + (stay ? ", " + stay : "") + ". Questions? " + mail + " or " + wa + ".";
 }
 
 // Stay links need the agreement accepted on Stripe's page. Fees do not.
 function applyLinkFields_(fd, link, lang) {
   fd["custom_text[submit][message]"] = link.guestLine;
   if (link.flow !== "booking") {
-    // Fees: the same tick box, against the website terms.
+    // Fees: the same tick box, against the website terms, which do not mention
+    // keeping a card. So the box says it, in place of Stripe's hidden line.
     fd["consent_collection[terms_of_service]"] = "required";
     fd["custom_text[terms_of_service_acceptance][message]"] = lang === "es"
-      ? "He leído y acepto los [Términos y Condiciones](https://casapapelillo.com/es/terminos-y-condiciones/) de Casa Papelillo."
-      : "I have read and accept Casa Papelillo's [Terms & Conditions](https://casapapelillo.com/terms-conditions/).";
+      ? "He leído y acepto los [Términos y Condiciones](https://casapapelillo.com/es/terminos-y-condiciones/) de Casa Papelillo, y autorizo a Casa Papelillo a conservar esta tarjeta para los cargos previstos en ellos."
+      : "I have read and accept Casa Papelillo's [Terms & Conditions](https://casapapelillo.com/terms-conditions/), and authorize Casa Papelillo to keep this card on file for charges under those terms.";
     return;
   }
   fd["consent_collection[terms_of_service]"] = "required";

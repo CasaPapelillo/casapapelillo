@@ -243,14 +243,11 @@ function createBookingSession_(q) {
   // Create a Stripe Customer for this booking
   fd["customer_creation"] = "always";
 
-  // Save the card for possible future off-session charges. Stays only: the
-  // agreement authorizes it (Payment section). Fee links save no card.
-  const savesCard = !link || link.flow === "booking";
-  if (savesCard) {
-    fd["payment_intent_data[setup_future_usage]"] = "off_session";
-    // The agreement tick box already covers this, so Stripe's line is hidden.
-    fd["consent_collection[payment_method_reuse_agreement][position]"] = "hidden";
-  }
+  // Save the card for possible future off-session charges, on every session
+  // and link (Oliver, 3 Nov). The tick box covers it: the agreement on stays,
+  // the wording in applyLinkFields_ on fees. So Stripe's own line is hidden.
+  fd["payment_intent_data[setup_future_usage]"] = "off_session";
+  fd["consent_collection[payment_method_reuse_agreement][position]"] = "hidden";
 
   fd["metadata[guest_name]"] = String(data.name).trim();
   fd["metadata[phone]"] = String(data.phone).trim();

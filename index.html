@@ -105,7 +105,7 @@ textarea{min-height:80px;resize:vertical}
    we fetch the live file once; if its WIDGET_BUILD differs, we reload once with
    ?b=<build> (a fresh cache key). Never reloads twice, never after the visitor
    has clicked or typed anything. BUMP WIDGET_BUILD ON EVERY COMMIT. */
-var WIDGET_BUILD="2026-11-03h";
+var WIDGET_BUILD="2026-11-03i";
 (function(){
   if(/[?&]prefetch=1(&|$)/.test(window.location.search))return;
   var touched=false,mark=function(){touched=true};
@@ -224,7 +224,7 @@ total_nights:["{0} {1} total","Total de {0} {1}"],
 hint_co:["Select check-out date","Elija la fecha de check-out"],
 lbl_guests:["Guests","Huéspedes"],
 lbl_pets:["Pets","Mascotas"],
-pet_note:["Note: Pets are charged extra at {0} per pet, per night","Nota: las mascotas tienen un cargo adicional de {0} por mascota, por noche"],
+pet_note:["Note: Pets are charged extra at {0} per pet, per night","Nota: las mascotas tienen un cargo adicional de {0} USD por mascota, por noche"],
 /* Transportation */
 tr_title:["Transportation","Transporte"],
 tr_sub:["Add airport transfers to your booking. These will be charged with your reservation.","Agregue traslados al aeropuerto a su reservación. Se cobran junto con su reservación."],
